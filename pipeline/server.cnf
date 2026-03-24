@@ -1,0 +1,86 @@
+# MariaDB Enterprise Server Configuration
+# Optimized for AI RAG workload with dedicated data and log disks
+
+[mysqld]
+# Basic settings
+user = mysql
+pid-file = /run/mysqld/mysqld.pid
+socket = /run/mysqld/mysqld.sock
+port = 3306
+basedir = /usr
+datadir = /data/mariadb
+tmpdir = /tmp
+lc-messages-dir = /usr/share/mysql
+
+# Connection settings
+max_connections = 200
+connect_timeout = 10
+wait_timeout = 600
+max_allowed_packet = 64M
+
+# General and slow query log settings
+general_log = 1
+general_log_file = /logs/mariadb/mariadb.log
+log_error = /logs/mariadb/mariadb.err
+slow_query_log = 1
+slow_query_log_file = /logs/mariadb/mariadb-slow.log
+long_query_time = 2
+
+# Binary logging
+log_bin = /logs/mariadb/mariadb-bin
+expire_logs_days = 7
+max_binlog_size = 100M
+
+# InnoDB settings for AI RAG workloads
+innodb_buffer_pool_size = 2G
+innodb_log_file_size = 256M
+innodb_log_buffer_size = 16M
+innodb_flush_log_at_trx_commit = 2
+innodb_flush_method = O_DIRECT
+innodb_file_per_table = 1
+innodb_io_capacity = 2000
+innodb_io_capacity_max = 4000
+innodb_read_io_threads = 8
+innodb_write_io_threads = 8
+innodb_thread_concurrency = 16
+innodb_lock_wait_timeout = 120
+innodb_deadlock_detect = 1
+
+# MyISAM settings
+key_buffer_size = 32M
+myisam_sort_buffer_size = 8M
+
+# Query cache (disabled for better performance with AI workloads)
+query_cache_type = 0
+query_cache_size = 0
+
+# Memory settings for AI RAG
+sort_buffer_size = 2M
+read_buffer_size = 2M
+read_rnd_buffer_size = 8M
+tmp_table_size = 64M
+max_heap_table_size = 64M
+
+# Character set
+character-set-server = utf8mb4
+collation-server = utf8mb4_unicode_ci
+
+# Security
+local-infile = 0
+
+# AI RAG and Vector Search optimizations
+# HNSW (Hierarchical Navigable Small Worlds) vector index settings
+mhnsw_max_cache_size = 16777216
+mhnsw_default_distance = euclidean
+mhnsw_default_m = 8
+mhnsw_ef_search = 32
+
+# Performance schema (minimal overhead for AI workloads)
+performance_schema = 0
+
+# Plugin directory
+plugin_dir = /usr/lib/mysql/plugin
+
+# Include additional configuration files
+!includedir /etc/mysql/mariadb.conf.d/
+!includedir /etc/mysql/conf.d/
