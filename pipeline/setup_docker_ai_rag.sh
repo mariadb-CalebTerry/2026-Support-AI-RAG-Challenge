@@ -52,7 +52,7 @@ JWT_SECRET_KEY=$SECRET_KEY
 MCP_AUTH_SECRET_KEY=$SECRET_KEY
 
 echo "Creating configuration file with credentials..."
-cat > config.env.secure << EOF
+cat > config.env << EOF
 # ===== DATABASE CONFIGURATION =====
 DB_HOST=mysql-db
 DB_PORT=3306
@@ -111,20 +111,20 @@ MCP_MARIADB_HOST=rag-api
 EOF
 
 echo "Setting proper permissions..."
-chmod 600 config.env.secure
+chmod 600 config.env
 chmod 755 uploaded_files logs
 
 echo "Pulling Docker images..."
-docker compose -f docker-compose.dockerhub-dev.yml --env-file config.env.secure pull
+docker compose -f docker-compose.dockerhub-dev.yml --env-file config.env pull
 
 echo "Starting MariaDB AI RAG stack..."
-docker compose -f docker-compose.dockerhub-dev.yml --env-file config.env.secure up -d
+docker compose -f docker-compose.dockerhub-dev.yml --env-file config.env up -d
 
 echo "Waiting for services to be ready..."
 sleep 30
 
 echo "Checking service status..."
-docker compose -f docker-compose.dockerhub-dev.yml --env-file config.env.secure ps
+docker compose -f docker-compose.dockerhub-dev.yml --env-file config.env ps
 
 echo "Waiting for database initialization..."
 sleep 60
