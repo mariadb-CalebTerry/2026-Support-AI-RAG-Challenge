@@ -177,3 +177,8 @@ service-account-key.json
 
 # MariaDB Native
 *.deb
+
+gemini_key.txt
+mariadb_token.txt
+rag_license.txt
+*config.env.secure*

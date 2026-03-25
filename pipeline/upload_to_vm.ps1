@@ -16,6 +16,7 @@ $VmName = "vm-ai-rag-challenge"
 $Zone = "us-east1-b"
 $RemoteDir = "/tmp/ai_rag_challenge_scripts"
 $LocalPipelineDir = "C:\Projects\MariaDB\2026 Support AI RAG Challenge\pipeline"
+$LocalCredentialDir = "C:\Projects\MariaDB\2026 Support AI RAG Challenge"
 
 Write-Host "Setting Google Cloud project to $ProjectId..." -ForegroundColor Cyan
 gcloud config set project $ProjectId
@@ -37,6 +38,11 @@ try {
 
     Write-Host "Uploading pipeline files to the VM..." -ForegroundColor Cyan
     scp -i "$sshKeyPath" -o StrictHostKeyChecking=no -P 2222 -r $LocalPipelineDir "$sshUser@localhost`:$RemoteDir"
+
+    Write-Host "Uploading credential files..." -ForegroundColor Cyan
+    scp -i "$sshKeyPath" -o StrictHostKeyChecking=no -P 2222 "$LocalCredentialDir\mariadb_token.txt" "$sshUser@localhost`:$RemoteDir/"
+    scp -i "$sshKeyPath" -o StrictHostKeyChecking=no -P 2222 "$LocalCredentialDir\gemini_key.txt" "$sshUser@localhost`:$RemoteDir/"
+    scp -i "$sshKeyPath" -o StrictHostKeyChecking=no -P 2222 "$LocalCredentialDir\rag_license.txt" "$sshUser@localhost`:$RemoteDir/"
 }
 finally {
     if (-not $tunnelProcess.HasExited) {
@@ -49,12 +55,13 @@ Write-Host ""
 Write-Host "======================================================" -ForegroundColor Green
 Write-Host "Upload Complete!" -ForegroundColor Green
 Write-Host "Your files are located on the VM at: $RemoteDir/pipeline" -ForegroundColor White
+Write-Host "Credentials are located on the VM at: $RemoteDir/" -ForegroundColor White
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Yellow
 Write-Host "1. Connect to the VM:" -ForegroundColor White
 Write-Host "   .\connect_vm.ps1" -ForegroundColor Cyan
 Write-Host "2. Navigate to the uploaded directory:" -ForegroundColor White
 Write-Host "   cd $RemoteDir/pipeline" -ForegroundColor Cyan
-Write-Host "3. Run the installation script:" -ForegroundColor White
-Write-Host "   bash install_mariadb_native.sh" -ForegroundColor Cyan
+Write-Host "3. Run the Docker setup script:" -ForegroundColor White
+Write-Host "   bash setup_docker_ai_rag.sh" -ForegroundColor Cyan
 Write-Host "======================================================" -ForegroundColor Green

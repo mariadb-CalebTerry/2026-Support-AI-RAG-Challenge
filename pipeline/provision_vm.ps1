@@ -15,28 +15,32 @@ $ProjectId = "mariadb-rag-ai-challenge"
 $VmName = "vm-ai-rag-challenge"
 $Zone = "us-east1-b"
 $MachineType = "n2-standard-4"
-$ImageFamily = "debian-12"
-$ImageProject = "debian-cloud"
+$ImageFamily = "ubuntu-2204-lts"
+$ImageProject = "ubuntu-os-cloud"
 
 Write-Host "Setting Google Cloud project to $ProjectId..." -ForegroundColor Cyan
 gcloud config set project $ProjectId
 
-Write-Host "Checking if VM instance '$VmName' already exists..." -ForegroundColor Cyan
+Write-Host "Deleting existing VM instance '$VmName' if it exists..." -ForegroundColor Cyan
 $vmExists = gcloud compute instances list --filter="name=$VmName" --format="value(name)"
-if (-not $vmExists) {
-    Write-Host "Provisioning VM instance '$VmName' with dedicated data and log disks..." -ForegroundColor Cyan
-    gcloud compute instances create $VmName `
-        --machine-type=$MachineType `
-        --zone=$Zone `
-        --image-family=$ImageFamily `
-        --image-project=$ImageProject `
-        --tags="iap" `
-        --create-disk="name=$VmName-data,size=64GB,type=pd-ssd,auto-delete=yes,device-name=data-disk" `
-        --create-disk="name=$VmName-logs,size=32GB,type=pd-standard,auto-delete=yes,device-name=log-disk"
+if ($vmExists) {
+    Write-Host "Found existing VM '$VmName'. Deleting..." -ForegroundColor Yellow
+    gcloud compute instances delete $VmName --zone=$Zone --quiet
+    Write-Host "Existing VM deleted." -ForegroundColor Green
 }
 else {
-    Write-Host "VM instance '$VmName' already exists. Skipping creation." -ForegroundColor Yellow
+    Write-Host "No existing VM '$VmName' found. Continuing..." -ForegroundColor Yellow
 }
+
+Write-Host "Provisioning VM instance '$VmName' with dedicated data and log disks..." -ForegroundColor Cyan
+gcloud compute instances create $VmName `
+    --machine-type=$MachineType `
+    --zone=$Zone `
+    --image-family=$ImageFamily `
+    --image-project=$ImageProject `
+    --tags="iap" `
+    --create-disk="name=$VmName-data,size=64GB,type=pd-ssd,auto-delete=yes,device-name=data-disk" `
+    --create-disk="name=$VmName-logs,size=32GB,type=pd-standard,auto-delete=yes,device-name=log-disk"
 
 Write-Host "Creating firewall rule to allow SSH via IAP..." -ForegroundColor Cyan
 # Check if firewall rule already exists to prevent errors on re-runs
