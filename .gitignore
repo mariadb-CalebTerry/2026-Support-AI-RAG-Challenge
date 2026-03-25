@@ -181,4 +181,4 @@ service-account-key.json
 gemini_key.txt
 mariadb_token.txt
 rag_license.txt
-*config.env.secure*
+*config.env*
