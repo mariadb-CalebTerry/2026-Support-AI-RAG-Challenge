@@ -181,9 +181,13 @@ The following credentials are available on the VM at `/tmp/ai_rag_challenge_scri
 - `docker-compose.dockerhub-dev.yml`: Official Docker Compose configuration
 - `config.env.secure`: Environment configuration with credentials
 
-### Data Ingestion
+### API-First Data Ingestion
 
-- `ingest_zendesk.py`: Python script to fetch, chunk, embed, and insert Zendesk tickets into MariaDB
+- `ingest_zendesk.py`: Python script to fetch Zendesk tickets, generate rich metadata tags, download attachments, and stream them natively to the MariaDB AI RAG API (`/documents/ingest`). It uses a local SQLite database (`ingestion_state.db`) to guarantee idempotency.
+
+### Enterprise Shared Platform Client
+
+- `rag_platform_client.py`: Python script demonstrating a multi-tenant AI RAG workflow. It queries the unified MariaDB Vector store via the RAG API and dynamically injects metadata filters to serve four distinct personas.
 
 ## Service Management
 
@@ -207,40 +211,40 @@ sudo docker compose down && sudo docker compose up -d
 
 ## Next Steps After Deployment
 
-1. **Generate Authentication Token:**
+### 1. Ingest Zendesk Data
 
-   ```bash
-   curl -X POST "http://localhost:8000/token" \
-     -H "Content-Type: application/json" \
-     -d '{"username":"admin","password":"mariadb_rag_password_2024"}'
-   ```
+First, populate the environment by running the ingestion script. This will pull tickets, format them, handle attachments, and push everything into the unified vector store.
 
-2. **Test Document Upload:**
+```bash
+cd /tmp/ai_rag_challenge_scripts/pipeline
+python ingest_zendesk.py --limit 100
+```
 
-   ```bash
-   # Create test document
-   echo "This is a test document for MariaDB AI RAG." > test.txt
+### 2. Run Persona-Based Queries
 
-   # Upload (requires auth token)
-   curl -X POST "http://localhost:8000/documents/ingest" \
-     -H "Authorization: Bearer <token>" \
-     -F "file=@test.txt"
-   ```
+Once data is ingested, you can test the multi-tenant architecture using the provided client script. This script connects to the RAG API and filters results based on the chosen role.
 
-3. **Test RAG Query:**
-   ```bash
-   curl -X POST "http://localhost:8000/orchestrate/generation" \
-     -H "Authorization: Bearer <token>" \
-     -H "Content-Type: application/json" \
-     -d '{"query":"What is this document about?"}'
-   ```
+```bash
+cd /tmp/ai_rag_challenge_scripts/pipeline
+
+# 1. Support Persona (Quick resolutions, error codes)
+python rag_platform_client.py --persona support --query "How do I fix a connection timeout error?"
+
+# 2. DPA Persona (Performance, optimization)
+python rag_platform_client.py --persona dpa --query "Recommendations for memory optimization"
+
+# 3. PS Persona (Customer scenarios, best practices)
+python rag_platform_client.py --persona ps --query "Best practices for setting up Galera cluster"
+
+# 4. SRE Persona (Outages, replication monitoring)
+python rag_platform_client.py --persona sre --query "Troubleshooting replication lag and GTID errors"
+```
 
 ## Key Features
 
 - Docker-based deployment for consistency and scalability
 - MariaDB AI RAG 1.1 (Beta) with native vector search
-- Automated VM provisioning with Docker installation
-- Secure credential management and configuration
-- Zendesk ticket ingestion with chunking and embedding
-- Windows-compatible PowerShell scripts with GCP IAP tunnel workarounds
-- Health monitoring and service verification
+- Single unified vector store managed dynamically by the REST API
+- `rag-docling-ray` integration for advanced OCR layout extraction of ticket attachments
+- Idempotent API-first ingestion pipeline tracking state via local SQLite
+- Role-based multi-tenant search filtering using rich JSON metadata tags
