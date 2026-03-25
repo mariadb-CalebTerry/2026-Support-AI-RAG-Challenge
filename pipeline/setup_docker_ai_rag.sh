@@ -42,15 +42,37 @@ sudo systemctl enable docker
 echo "Adding current user to docker group..."
 sudo usermod -aG docker $USER
 
+echo "Checking if dedicated disks are mounted..."
+echo "Current mount status:"
+df -h | grep -E "/data|/logs" || echo "No /data or /logs mounts found"
+
+# Check if /data is mounted using df (more reliable than mountpoint)
+if df -h | grep -q "/data"; then
+    echo "Data disk is already mounted"
+else
+    echo "Data disk not mounted. Running disk configuration..."
+    cd /tmp/ai_rag_challenge_scripts/pipeline
+    bash configure_disks.sh
+    echo "Disk configuration completed. Verifying mounts..."
+    df -h | grep -q "/data" && echo "/data is now mounted" || echo "ERROR: /data still not mounted"
+    df -h | grep -q "/logs" && echo "/logs is now mounted" || echo "ERROR: /logs still not mounted"
+fi
+
 echo "Creating deployment directory..."
-mkdir -p /home/$USER/mariadb-rag-deployment
-cd /home/$USER/mariadb-rag-deployment
+sudo mkdir -p /data/mariadb-rag-deployment
+cd /data/mariadb-rag-deployment
 
 echo "Creating required directories..."
-mkdir -p uploaded_files logs
+sudo mkdir -p /data/uploaded_files /data/redis /logs/rag
+sudo chown -R $USER:$USER /data/uploaded_files /data/redis /logs/rag
 
 echo "Downloading Docker Compose configuration..."
-curl -fsSL https://raw.githubusercontent.com/mariadb-corporation/mariadb-docs/refs/heads/main/tools/docker-compose.dockerhub-dev.yml -o docker-compose.dockerhub-dev.yml
+if [ ! -f "docker-compose.yml" ]; then
+    sudo curl -fsSL https://raw.githubusercontent.com/mariadb-corporation/mariadb-docs/refs/heads/main/tools/docker-compose.dockerhub-dev.yml -o docker-compose.yml
+    sudo chown $USER:$USER docker-compose.yml
+else
+    echo "docker-compose.yml already exists, skipping download"
+fi
 
 echo "Generating secure keys..."
 SECRET_KEY=$(openssl rand -hex 32)
@@ -58,79 +80,49 @@ JWT_SECRET_KEY=$SECRET_KEY
 MCP_AUTH_SECRET_KEY=$SECRET_KEY
 
 echo "Creating configuration file with credentials..."
-cat > config.env << EOF
-# ===== DATABASE CONFIGURATION =====
-DB_HOST=mysql-db
-DB_PORT=3306
-DB_USER=root
-DB_PASSWORD=mariadb_rag_password_2024
-DB_NAME=kb_chunks
-
-# ===== MARIADB LICENSE KEY (MANDATORY) =====
-MARIADB_LICENSE_KEY=$MARIADB_LICENSE_KEY
-
-# ===== API KEYS =====
-GEMINI_API_KEY=$GEMINI_API_KEY
-
-# ===== SECURITY KEYS (MUST BE IDENTICAL) =====
-SECRET_KEY=$SECRET_KEY
-JWT_SECRET_KEY=$JWT_SECRET_KEY
-MCP_AUTH_SECRET_KEY=$MCP_AUTH_SECRET_KEY
-
-# ===== SERVER CONFIGURATION =====
-APP_HOST=rag-api
-APP_PORT=8000
-MCP_HOST=rag-api
-MCP_PORT=8002
-
-# ===== EMBEDDING & LLM =====
-EMBEDDING_PROVIDER=gemini
-embedding_model=text-embedding-004
-LLM_PROVIDER=gemini
-LLM_MODEL=gemini-2.0-flash
-
-# ===== TABLE NAMES =====
-DOCUMENTS_TABLE=documents_DEMO_gemini
-VDB_TABLE=vdb_tbl_DEMO_gemini
-
-# ===== MCP CONFIGURATION =====
-MCP_ENABLE_AUTH=true
-MCP_ENABLE_VECTOR_TOOLS=true
-MCP_ENABLE_DATABASE_TOOLS=true
-MCP_ENABLE_RAG_TOOLS=true
-MCP_READ_ONLY=false
-MCP_LOG_LEVEL=INFO
-
-# ===== PROCESSING =====
-CHUNK_SIZE=512
-CHUNK_OVERLAP=128
-DOCUMENT_PROCESSING_BATCH_SIZE=5
-EMBEDDING_BATCH_SIZE=32
-
-# ===== RERANKING =====
-RERANKING_ENABLED=true
-RERANKING_MODEL_TYPE=flashrank
-RERANKING_MODEL_NAME=ms-marco-MiniLM-L-12-v2
-
-# ===== DOCKER INTERNAL HOSTNAMES (CRITICAL) =====
-MCP_MARIADB_HOST=rag-api
-EOF
+if [ ! -f "config.env" ]; then
+    # Use the existing config.env as template
+    sudo cp /tmp/ai_rag_challenge_scripts/pipeline/config.env config.env
+    
+    # Update with the actual credentials read earlier
+    sudo sed -i "s/GEMINI_API_KEY=.*/GEMINI_API_KEY=$GEMINI_API_KEY/" config.env
+    sudo sed -i "s/MARIADB_LICENSE_KEY=.*/MARIADB_LICENSE_KEY=$MARIADB_LICENSE_KEY/" config.env
+    
+    # Generate new secure keys and update them
+    SECRET_KEY=$(openssl rand -hex 32)
+    sudo sed -i "s/SECRET_KEY=.*/SECRET_KEY=$SECRET_KEY/" config.env
+    sudo sed -i "s/JWT_SECRET_KEY=.*/JWT_SECRET_KEY=$SECRET_KEY/" config.env
+    sudo sed -i "s/MCP_AUTH_SECRET_KEY=.*/MCP_AUTH_SECRET_KEY=$SECRET_KEY/" config.env
+    
+    sudo chown $USER:$USER config.env
+else
+    echo "config.env already exists, skipping creation"
+fi
 
 echo "Setting proper permissions..."
 chmod 600 config.env
-chmod 755 uploaded_files logs
+sudo chmod 755 /data/uploaded_files /logs/rag
 
 echo "Pulling Docker images..."
-docker compose -f docker-compose.dockerhub-dev.yml --env-file config.env pull
+if docker compose -f docker-compose.yml --env-file config.env pull; then
+    echo "Docker images pulled successfully"
+else
+    echo "Warning: Some images may have failed to pull, continuing..."
+fi
 
 echo "Starting MariaDB AI RAG stack..."
-docker compose -f docker-compose.dockerhub-dev.yml --env-file config.env up -d
+if docker compose -f docker-compose.yml --env-file config.env up -d; then
+    echo "Docker stack started successfully"
+else
+    echo "Error: Failed to start Docker stack"
+    exit 1
+fi
 
 echo "Waiting for services to be ready..."
 sleep 30
 
 echo "Checking service status..."
-docker compose -f docker-compose.dockerhub-dev.yml --env-file config.env ps
+docker compose -f docker-compose.yml --env-file config.env ps
 
 echo "Waiting for database initialization..."
 sleep 60
@@ -152,9 +144,9 @@ echo "- RAG API Health: http://localhost:8000/health"
 echo "- MCP Server: http://localhost:8002/mcp"
 echo "- MCP Health: http://localhost:8002/health"
 echo ""
-echo "To check status: docker compose -f docker-compose.dockerhub-dev.yml ps"
-echo "To view logs: docker compose -f docker-compose.dockerhub-dev.yml logs"
-echo "To stop: docker compose -f docker-compose.dockerhub-dev.yml down"
+echo "To check status: docker compose -f docker-compose.yml ps"
+echo "To view logs: docker compose -f docker-compose.yml logs"
+echo "To stop: docker compose -f docker-compose.yml down"
 echo "======================================================"
 
 # Get the external IP for external access

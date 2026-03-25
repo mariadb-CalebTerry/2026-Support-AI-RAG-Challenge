@@ -101,8 +101,8 @@ services:
     ports:
       - "${APP_PORT:-8000}:8000"
     volumes:
-      - ${LOCAL_STORAGE_HOST_PATH:-./uploaded_files}:/app/uploaded_files
-      - ./logs:/app/logs
+      - ${LOCAL_STORAGE_HOST_PATH:-/data/uploaded_files}:/app/uploaded_files
+      - /logs/rag:/app/logs
     depends_on:
       mariadb:
         condition: service_healthy
@@ -208,8 +208,8 @@ services:
       RERANKING_HYBRID_BETA: ${RERANKING_HYBRID_BETA:-0.3}
 
     volumes:
-      - ${LOCAL_STORAGE_HOST_PATH:-./uploaded_files}:/app/uploaded_files
-      - ./logs:/app/logs
+      - ${LOCAL_STORAGE_HOST_PATH:-/data/uploaded_files}:/app/uploaded_files
+      - /logs/rag:/app/logs
     depends_on:
       mariadb:
         condition: service_healthy
@@ -292,8 +292,8 @@ services:
     ports:
       - "8002:8002"
     volumes:
-      - ${LOCAL_STORAGE_HOST_PATH:-./uploaded_files}:/app/uploaded_files
-      - ./logs:/app/logs
+      - ${LOCAL_STORAGE_HOST_PATH:-/data/uploaded_files}:/app/uploaded_files
+      - /logs/rag:/app/logs
     depends_on:
       rag-api:
         condition: service_healthy
@@ -322,7 +322,7 @@ services:
     ports:
       - "${DB_PORT:-3306}:3306"
     volumes:
-      - mariadb_data:/var/lib/mysql
+      - /data/mariadb:/var/lib/mysql
     networks:
       - rag-network
     healthcheck:
@@ -341,7 +341,7 @@ services:
     ports:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
-      - redis_data:/data
+      - /data/redis:/data
     networks:
       - rag-network
     healthcheck:
@@ -363,7 +363,7 @@ services:
       DOCLING_RAY_SERVICE_PORT: ${DOCLING_RAY_SERVICE_PORT:-8003}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     volumes:
-      - ${LOCAL_STORAGE_HOST_PATH:-./uploaded_files}:/app/uploaded_files
+      - /data/uploaded_files:/app/uploaded_files
     networks:
       - rag-network
     healthcheck:
@@ -373,12 +373,6 @@ services:
       retries: 3
       start_period: 60s
     restart: unless-stopped
-
-volumes:
-  mariadb_data:
-    driver: local
-  redis_data:
-    driver: local
 
 networks:
   rag-network:

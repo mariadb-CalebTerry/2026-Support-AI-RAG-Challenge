@@ -1,13 +1,13 @@
 # 2026 Support AI RAG Challenge
 
-This project sets up a shared GCP VM environment hosting MariaDB AI RAG 1.1 (Beta) deployed with Docker Compose. It includes a complete RAG stack with MariaDB 11, Redis, and AI services for document ingestion and semantic search.
+This project sets up a shared GCP VM environment hosting MariaDB AI RAG 1.1 (Beta) deployed with Docker Compose. It includes a complete RAG stack with MariaDB 11.8, Redis, and AI services for document ingestion and semantic search.
 
 ## Architecture
 
-- **GCP VM**: `vm-ai-rag-challenge` in `us-east1-b` (n2-standard-4, Ubuntu 22.04 LTS)
+- **GCP VM**: `vm-ai-rag-challenge` in `us-east1-b` (n2-standard-4, Debian 12)
 - **Storage**:
-  - 64GB pd-ssd data disk mounted at `/data`
-  - 32GB pd-standard log disk mounted at `/logs`
+  - 64GB pd-ssd data disk mounted at `/data` (for MariaDB data, Redis data, and uploaded files)
+  - 32GB pd-standard log disk mounted at `/logs` (for application logs)
 - **Database**: MariaDB AI RAG 1.1 (Beta) with Docker Compose
 - **Access**: IAP (Identity-Aware Proxy) SSH only via TCP port 22
 
@@ -15,13 +15,15 @@ This project sets up a shared GCP VM environment hosting MariaDB AI RAG 1.1 (Bet
 
 ✅ **Completed:**
 
-- GCP VM provisioned with Ubuntu 22.04 LTS
+- GCP VM provisioned with Debian 12
 - Docker Engine installed
 - All scripts and credentials uploaded to VM
 - MariaDB Enterprise token available for authentication
+- Dedicated disks (64GB data, 32GB logs) attached and ready
 
 ⚠️ **Manual Steps Required:**
 
+- Configure and mount dedicated disks
 - Docker login to MariaDB registry
 - Complete AI RAG container deployment
 - Service verification and testing
@@ -34,13 +36,28 @@ This project sets up a shared GCP VM environment hosting MariaDB AI RAG 1.1 (Bet
 .\pipeline\connect_vm.ps1
 ```
 
-### 2. Navigate to Deployment Directory
+### 2. Configure Dedicated Disks
+
+First, mount the dedicated disks to provide sufficient space for Docker images and data:
 
 ```bash
-cd /home/caleb_terry/mariadb-rag-deployment
+cd /tmp/ai_rag_challenge_scripts/pipeline
+bash configure_disks.sh
 ```
 
-### 3. Login to MariaDB Docker Registry
+This will:
+
+- Format and mount `/data` (64GB) for MariaDB data, Redis data, and uploaded files
+- Format and mount `/logs` (32GB) for application logs
+- Create required directories with proper permissions
+
+### 3. Navigate to Deployment Directory
+
+```bash
+cd /data/mariadb-rag-deployment
+```
+
+### 4. Login to MariaDB Docker Registry
 
 Use the MariaDB Enterprise token to authenticate:
 
@@ -48,7 +65,7 @@ Use the MariaDB Enterprise token to authenticate:
 sudo docker login docker.mariadb.com -u token -p 87e2f31b-c33e-4b10-82e6-3a6b64600319
 ```
 
-### 4. Verify Configuration Files
+### 5. Verify Configuration Files
 
 Check that the configuration files exist and have correct permissions:
 
@@ -63,7 +80,7 @@ cat config.env.secure
 ls -l config.env.secure
 ```
 
-### 5. Deploy the AI RAG Stack
+### 6. Deploy the AI RAG Stack
 
 #### Option A: Full Stack (if all images are accessible)
 
@@ -81,7 +98,7 @@ sudo docker compose -f docker-compose.basic.yml up -d
 sudo docker compose -f docker-compose.fixed.yml --env-file config.env.secure up -d
 ```
 
-### 6. Verify Deployment
+### 7. Verify Deployment
 
 ```bash
 # Check container status
@@ -95,7 +112,7 @@ sudo docker compose logs rag-api
 sudo docker compose logs mysql-db
 ```
 
-### 7. Test Health Endpoints
+### 8. Test Health Endpoints
 
 ```bash
 # Test RAG API health
@@ -108,7 +125,7 @@ curl http://localhost:8002/health
 sudo docker exec rag-mariadb mysql -u root -pmariadb_rag_password_2024 -e "SHOW DATABASES;"
 ```
 
-### 8. Access Services
+### 9. Access Services
 
 Get the external IP for external access:
 
@@ -132,6 +149,30 @@ If you get authentication errors:
 1. Verify the token is correct: `cat /tmp/ai_rag_challenge_scripts/mariadb_token.txt`
 2. Try logging out and back in: `sudo docker logout && sudo docker login docker.mariadb.com -u token -p <token>`
 3. Check if you need a different registry URL
+
+### Disk Space Issues
+
+If you encounter "no space left on device" errors:
+
+1. **First, ensure disks are mounted:**
+
+   ```bash
+   df -h
+   # You should see /data and /logs mounted
+   ```
+
+2. **If disks aren't mounted, run:**
+
+   ```bash
+   cd /tmp/ai_rag_challenge_scripts/pipeline
+   bash configure_disks.sh
+   ```
+
+3. **Check Docker is using mounted disks:**
+   ```bash
+   # Docker data should be using /data partition
+   docker system df
+   ```
 
 ### Image Pull Issues
 
@@ -177,8 +218,9 @@ The following credentials are available on the VM at `/tmp/ai_rag_challenge_scri
 
 ### Docker Deployment
 
+- `configure_disks.sh`: Formats and mounts dedicated disks for data and logs
 - `setup_docker_ai_rag.sh`: Automated Docker setup script (requires manual completion)
-- `docker-compose.dockerhub-dev.yml`: Official Docker Compose configuration
+- `docker-compose.yml`: Updated Docker Compose configuration using mounted disks
 - `config.env.secure`: Environment configuration with credentials
 
 ### API-First Data Ingestion
@@ -188,6 +230,22 @@ The following credentials are available on the VM at `/tmp/ai_rag_challenge_scri
 ### Enterprise Shared Platform Client
 
 - `rag_platform_client.py`: Python script demonstrating a multi-tenant AI RAG workflow. It queries the unified MariaDB Vector store via the RAG API and dynamically injects metadata filters to serve four distinct personas.
+
+## Disk Layout
+
+The dedicated disks are organized as follows:
+
+### /data (64GB pd-ssd)
+
+- `/data/mariadb/` - MariaDB database files
+- `/data/redis/` - Redis data files
+- `/data/uploaded_files/` - Document uploads and attachments
+- `/data/mariadb-rag-deployment/` - Docker deployment directory
+
+### /logs (32GB pd-standard)
+
+- `/logs/mariadb/` - MariaDB error/general logs
+- `/logs/rag/` - Application logs (rag-api, celery-worker, mcp-server)
 
 ## Service Management
 

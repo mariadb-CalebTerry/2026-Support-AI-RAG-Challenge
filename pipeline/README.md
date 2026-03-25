@@ -4,7 +4,7 @@ This repository contains the infrastructure provisioning and Docker deployment s
 
 ## 1. VM Provisioning (`provision_vm.ps1`)
 
-This script uses the Google Cloud CLI (`gcloud`) to provision the central Virtual Machine (`vm-ai-rag-challenge`) that will host the Docker-based AI RAG stack. It deletes any existing VM and creates a new Ubuntu 22.04 LTS instance with Docker prerequisites.
+This script uses the Google Cloud CLI (`gcloud`) to provision the central Virtual Machine (`vm-ai-rag-challenge`) that will host the Docker-based AI RAG stack. It deletes any existing VM and creates a new Debian 12 instance with Docker prerequisites and dedicated data disks.
 
 **Usage:**
 
@@ -12,7 +12,25 @@ This script uses the Google Cloud CLI (`gcloud`) to provision the central Virtua
 .\provision_vm.ps1
 ```
 
-## 2. Upload Files to VM (`upload_to_vm.ps1`)
+## 2. Configure Disks (`configure_disks.sh`)
+
+This script formats and mounts the dedicated disks that were attached during VM provisioning. This is critical for providing sufficient space for Docker images and data.
+
+**What it does:**
+
+- Formats and mounts 64GB data disk at `/data`
+- Formats and mounts 32GB log disk at `/logs`
+- Creates required directories for MariaDB, Redis, and application data
+- Sets proper permissions for all directories
+
+**Usage:**
+
+```bash
+cd /tmp/ai_rag_challenge_scripts/pipeline
+bash configure_disks.sh
+```
+
+## 3. Upload Files to VM (`upload_to_vm.ps1`)
 
 This script securely uploads the pipeline scripts and credential files to the newly provisioned VM using an IAP tunnel.
 
@@ -22,7 +40,7 @@ This script securely uploads the pipeline scripts and credential files to the ne
 .\upload_to_vm.ps1
 ```
 
-## 3. Docker AI RAG Deployment (`setup_docker_ai_rag.sh`)
+## 4. Docker AI RAG Deployment (`setup_docker_ai_rag.sh`)
 
 This script automates the complete Docker deployment of MariaDB AI RAG 1.1 (Beta) on Ubuntu. It installs Docker, downloads configurations, and starts the complete stack.
 
@@ -30,9 +48,9 @@ This script automates the complete Docker deployment of MariaDB AI RAG 1.1 (Beta
 
 - Installs Docker Engine and Docker Compose
 - Downloads official Docker Compose configuration
-- Creates required directories (uploaded_files, logs)
+- Creates required directories on mounted disks
 - Generates secure configuration with provided credentials
-- Deploys the complete AI RAG stack
+- Deploys the complete AI RAG stack using dedicated disks
 - Performs health checks and verification
 
 **Usage:**
@@ -48,7 +66,7 @@ This script automates the complete Docker deployment of MariaDB AI RAG 1.1 (Beta
 bash setup_docker_ai_rag.sh
 ```
 
-## 4. Zendesk Data Ingestion (`ingest_zendesk.py`)
+## 5. Zendesk Data Ingestion (`ingest_zendesk.py`)
 
 This Python script connects to the Zendesk API to fetch tickets and their corresponding comments, and ingests them into the Docker-deployed MariaDB AI RAG platform.
 
@@ -83,7 +101,7 @@ pip install -r requirements.txt
 python ingest_zendesk.py --limit 100
 ```
 
-## 5. Enterprise Shared Platform Client (`rag_platform_client.py`)
+## 6. Enterprise Shared Platform Client (`rag_platform_client.py`)
 
 This client demonstrates the multi-tenant architecture of our shared AI RAG platform. By leveraging the unified vector store and rich metadata ingested in step 4, this client allows different personas to query the exact same dataset using dynamic metadata filters tailored to their role.
 
@@ -112,14 +130,14 @@ python rag_platform_client.py --persona sre --query "Troubleshooting replication
 
 ## Docker Stack Architecture
 
-The deployment creates the following containers:
+The deployment creates the following containers with data stored on dedicated disks:
 
-- **ai-nexus (rag-api)**: Main AI RAG application (FastAPI + Uvicorn) providing the REST endpoints for ingestion and orchestration.
-- **mysql-db**: MariaDB 11.8 database with native vector support.
-- **rag-redis**: Redis for the background task queue.
-- **rag-celery-worker**: Background document processing, chunking, and embedding.
-- **rag-docling-ray**: Advanced document extraction (critical for parsing uploaded Zendesk attachments).
-- **mcp-server**: MariaDB Enterprise MCP Server acting as the interface between AI assistants and the data ecosystem.
+- **rag-api**: Main AI RAG application (FastAPI + Uvicorn) providing the REST endpoints for ingestion and orchestration. Logs stored in `/logs/rag/`.
+- **rag-mariadb**: MariaDB 11.8 database with native vector support. Data stored in `/data/mariadb/`.
+- **rag-redis**: Redis for the background task queue. Data stored in `/data/redis/`.
+- **rag-celery-worker**: Background document processing, chunking, and embedding. Logs stored in `/logs/rag/`.
+- **rag-docling-ray**: Advanced document extraction (critical for parsing uploaded Zendesk attachments). Processes files from `/data/uploaded_files/`.
+- **rag-mcp-server**: MariaDB Enterprise MCP Server acting as the interface between AI assistants and the data ecosystem. Logs stored in `/logs/rag/`.
 
 ## Access Points
 
@@ -134,16 +152,16 @@ After successful deployment:
 
 ```bash
 # Check service status
-docker compose -f docker-compose.dockerhub-dev.yml ps
+docker compose -f docker-compose.yml ps
 
 # View logs
-docker compose -f docker-compose.dockerhub-dev.yml logs
+docker compose -f docker-compose.yml logs
 
 # Stop services
-docker compose -f docker-compose.dockerhub-dev.yml down
+docker compose -f docker-compose.yml down
 
 # Restart services
-docker compose -f docker-compose.dockerhub-dev.yml restart
+docker compose -f docker-compose.yml restart
 ```
 
 ## Troubleshooting

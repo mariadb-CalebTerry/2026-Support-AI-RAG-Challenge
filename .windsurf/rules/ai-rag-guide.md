@@ -4,7 +4,7 @@ trigger: always_on
 
 # 2026 Support AI RAG Challenge
 
-This project sets up a shared GCP VM environment hosting MariaDB Enterprise Server with native VECTOR and HNSW support, alongside AI RAG components. It includes an ELT pipeline to ingest Zendesk ticket data into the MariaDB vector database.
+This project sets up a shared GCP VM environment hosting MariaDB AI RAG 1.1 (Beta) with Docker Compose, alongside AI RAG components. It includes an ELT pipeline to ingest Zendesk ticket data into the MariaDB vector database.
 
 ## Critical Rules
 
@@ -28,17 +28,18 @@ This project sets up a shared GCP VM environment hosting MariaDB Enterprise Serv
 
 ### Attached Disks
 
-- **Boot:** Default
-- **Data:** 64GB pd-ssd mounted at `/data`
-- **Logs:** 32GB pd-standard mounted at `/logs`
+- **Boot:** Default (10GB)
+- **Data:** 64GB pd-ssd mounted at `/data` (MariaDB data, Redis data, uploads)
+- **Logs:** 32GB pd-standard mounted at `/logs` (Application logs)
 
 ## Tech Stack
 
 - PowerShell (Provisioning, Automation)
 - Bash (Installation scripts)
 - Python 3 (ELT Pipeline)
-- MariaDB Enterprise Server 11.4
-- MariaDB AI RAG (.deb package)
+- MariaDB AI RAG 1.1 (Beta) with Docker Compose
+- MariaDB 11.8 with native vector support
+- Docker Engine & Docker Compose
 - Google Cloud Platform (GCP)
 
 ## Key Files
@@ -46,5 +47,7 @@ This project sets up a shared GCP VM environment hosting MariaDB Enterprise Serv
 - `pipeline/provision_vm.ps1`: Idempotent script to create the GCP VM, attached disks, and IAP firewall rules.
 - `pipeline/upload_to_vm.ps1`: Securely copies the pipeline scripts to the VM, working around Windows SCP bugs.
 - `pipeline/connect_vm.ps1`: Wrapper to securely SSH into the VM, bypassing Windows ProxyCommand bugs.
-- `pipeline/install_mariadb_native.sh`: Installs MariaDB natively, mounts disks, configures `my.cnf` for custom datadir, and sets up RAG database.
-- `pipeline/ingest_zendesk.py`: Idempotent Python script to fetch, chunk, embed, and insert Zendesk tickets into MariaDB.
+- `pipeline/configure_disks.sh`: Formats and mounts dedicated disks for data and logs.
+- `pipeline/setup_docker_ai_rag.sh`: Installs Docker and deploys MariaDB AI RAG stack.
+- `pipeline/docker-compose.yml`: Docker Compose configuration using mounted disks.
+- `pipeline/ingest_zendesk.py`: Idempotent Python script to fetch, chunk, embed, and insert Zendesk tickets into MariaDB via API.
