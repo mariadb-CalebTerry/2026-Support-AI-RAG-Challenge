@@ -50,22 +50,25 @@ bash setup_docker_ai_rag.sh
 
 ## 4. Zendesk Data Ingestion (`ingest_zendesk.py`)
 
-This Python script connects to the Zendesk API to fetch tickets and their corresponding comments, inserting them into the Docker-deployed MariaDB database.
+This Python script connects to the Zendesk API to fetch tickets and their corresponding comments, and ingests them into the Docker-deployed MariaDB AI RAG platform.
 
-It supports a `--limit` parameter allowing you to restrict the ingestion to a subset of data (e.g., for testing or limiting the dataset size).
+**Key Features (API-First RAG Integration):**
+
+- **Rich Metadata Generation:** Automatically tags tickets with categories like `technical_area`, `ticket_type`, and `complexity` based on content analysis.
+- **Attachment Handling:** Downloads Zendesk attachments and pushes them to the MariaDB AI RAG API.
+- **Docling-Ray Integration:** Relies on the `rag-docling-ray` specialist container to natively parse complex PDFs, logs, and tables from the uploaded attachments.
+- **Unified Vector Store:** All data is ingested via the REST API (`/documents/ingest`) and stored in a single, dynamically managed vector table.
 
 **Setup:**
 
-1. Create a `.env` file in this directory:
+1. Create a `.env` file in this directory based on `config.env.template`:
 
 ```env
 ZENDESK_SUBDOMAIN=your_subdomain
 ZENDESK_OAUTH_TOKEN=your_read_only_oauth_token
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_USER=root
-DB_PASSWORD=mariadb_rag_password_2024
-DB_NAME=kb_chunks
+RAG_API_URL=http://localhost:8000
+RAG_API_USER=admin
+RAG_API_PASSWORD=mariadb_rag_password_2024
 ```
 
 2. Install dependencies:
@@ -80,15 +83,43 @@ pip install -r requirements.txt
 python ingest_zendesk.py --limit 100
 ```
 
+## 5. Enterprise Shared Platform Client (`rag_platform_client.py`)
+
+This client demonstrates the multi-tenant architecture of our shared AI RAG platform. By leveraging the unified vector store and rich metadata ingested in step 4, this client allows different personas to query the exact same dataset using dynamic metadata filters tailored to their role.
+
+**Available Personas:**
+
+- `support`: Focuses on quick error code lookups and solved basic issues.
+- `dpa`: Database Performance Analyst, focusing on performance optimization techniques and benchmarks.
+- `ps`: Professional Services Consultant, focusing on customer scenarios, how-to guides, and best practices.
+- `sre`: Site Reliability Engineer, focusing on advanced outage recovery, replication, and monitoring.
+
+**Usage Examples:**
+
+```bash
+# Example for a Support Engineer
+python rag_platform_client.py --persona support --query "How do I fix a connection timeout error?"
+
+# Example for a Database Performance Analyst (DPA)
+python rag_platform_client.py --persona dpa --query "Recommendations for memory optimization"
+
+# Example for a Professional Services Consultant (PS)
+python rag_platform_client.py --persona ps --query "Best practices for setting up Galera cluster"
+
+# Example for a Site Reliability Engineer (SRE)
+python rag_platform_client.py --persona sre --query "Troubleshooting replication lag and GTID errors"
+```
+
 ## Docker Stack Architecture
 
 The deployment creates the following containers:
 
-- **ai-nexus**: Main AI RAG application (FastAPI + Uvicorn)
-- **mysql-db**: MariaDB 11 database with vector support
-- **rag-redis**: Redis for background task queue
-- **rag-celery-worker**: Background document processing
-- **rag-docling-ray**: Advanced document extraction
+- **ai-nexus (rag-api)**: Main AI RAG application (FastAPI + Uvicorn) providing the REST endpoints for ingestion and orchestration.
+- **mysql-db**: MariaDB 11.8 database with native vector support.
+- **rag-redis**: Redis for the background task queue.
+- **rag-celery-worker**: Background document processing, chunking, and embedding.
+- **rag-docling-ray**: Advanced document extraction (critical for parsing uploaded Zendesk attachments).
+- **mcp-server**: MariaDB Enterprise MCP Server acting as the interface between AI assistants and the data ecosystem.
 
 ## Access Points
 

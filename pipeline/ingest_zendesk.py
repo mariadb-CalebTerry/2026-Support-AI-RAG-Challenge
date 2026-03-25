@@ -1,7 +1,8 @@
 import os
 import requests
-import mariadb
 import sys
+import json
+import time
 from datetime import datetime
 from dotenv import load_dotenv
 
@@ -10,65 +11,74 @@ load_dotenv()
 
 ZENDESK_SUBDOMAIN = os.getenv("ZENDESK_SUBDOMAIN")
 ZENDESK_TOKEN = os.getenv("ZENDESK_OAUTH_TOKEN")
-DB_USER = os.getenv("DB_USER", "rag_user")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "ragpassword")
-DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
-DB_PORT = int(os.getenv("DB_PORT", 3306))
-DB_NAME = os.getenv("DB_NAME", "zendesk_rag")
+RAG_API_URL = os.getenv("RAG_API_URL", "http://localhost:8000")
+RAG_API_USER = os.getenv("RAG_API_USER", "admin")
+RAG_API_PASSWORD = os.getenv("RAG_API_PASSWORD", os.getenv("DB_PASSWORD", "mariadb_rag_password_2024"))
 
+TEMP_DIR = "/tmp/zendesk_attachments"
+if os.name == 'nt':
+    TEMP_DIR = os.path.join(os.environ.get('TEMP', 'C:\\Temp'), "zendesk_attachments")
 
-def get_db_connection():
+os.makedirs(TEMP_DIR, exist_ok=True)
+
+def get_rag_api_token():
+    print(f"Authenticating with RAG API at {RAG_API_URL}...")
     try:
-        conn = mariadb.connect(
-            user=DB_USER,
-            password=DB_PASSWORD,
-            host=DB_HOST,
-            port=DB_PORT,
-            database=DB_NAME,
+        response = requests.post(
+            f"{RAG_API_URL}/token",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            data={"username": RAG_API_USER, "password": RAG_API_PASSWORD}
         )
-        return conn
-    except mariadb.Error as e:
-        print(f"Error connecting to MariaDB: {e}")
+        response.raise_for_status()
+        return response.json().get("access_token")
+    except requests.exceptions.RequestException as e:
+        print(f"Error authenticating with RAG API: {e}")
         sys.exit(1)
 
-
-def setup_database(cursor):
-    """Create necessary tables if they don't exist."""
-    print("Setting up database tables...")
-    cursor.execute("CREATE DATABASE IF NOT EXISTS `zendesk_rag`")
-    cursor.execute("USE `zendesk_rag`")
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS tickets (
-            id BIGINT PRIMARY KEY,
-            subject VARCHAR(255),
-            description TEXT,
-            status VARCHAR(50),
-            created_at DATETIME,
-            updated_at DATETIME,
-            requester_id BIGINT,
-            assignee_id BIGINT,
-            tags TEXT
-        )
-    """
-    )
-
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS ticket_comments (
-            id BIGINT PRIMARY KEY,
-            ticket_id BIGINT,
-            body TEXT,
-            author_id BIGINT,
-            created_at DATETIME,
-            FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
-        )
-    """
-    )
-
+def generate_metadata(ticket, is_attachment=False, attachment_name=None):
+    subject = ticket.get("subject", "").lower() if ticket.get("subject") else ""
+    description = ticket.get("description", "").lower() if ticket.get("description") else ""
+    content = f"{subject} {description}"
+    
+    # Determine technical area
+    technical_area = "general"
+    if any(w in content for w in ["slow", "memory", "cpu", "performance"]):
+        technical_area = "performance"
+    elif any(w in content for w in ["replica", "master", "slave", "gtid", "binlog"]):
+        technical_area = "replication"
+    elif any(w in content for w in ["connection", "timeout", "refused"]):
+        technical_area = "connectivity"
+    elif any(w in content for w in ["backup", "restore", "dump"]):
+        technical_area = "backup"
+    
+    # Determine ticket type
+    ticket_type = "general"
+    if any(w in content for w in ["bug", "error", "issue", "problem"]):
+        ticket_type = "bug"
+    elif any(w in content for w in ["how to", "guide", "help"]):
+        ticket_type = "howto"
+        
+    # Determine complexity
+    complexity = "basic"
+    if technical_area in ["performance", "replication"] or "advanced" in content:
+        complexity = "advanced"
+        
+    metadata = {
+        "ticket_id": ticket.get("id"),
+        "ticket_type": ticket_type,
+        "technical_area": technical_area,
+        "complexity": complexity,
+        "is_attachment": is_attachment,
+        "status": ticket.get("status", "unknown"),
+        "source": "zendesk"
+    }
+    
+    if attachment_name:
+        metadata["attachment_name"] = attachment_name
+        
+    return metadata
 
 def fetch_zendesk_tickets(limit=None):
-    """Fetch tickets from Zendesk API. If limit is provided, restricts the subset."""
     print(f"Fetching tickets from Zendesk (Limit: {limit if limit else 'None'})...")
     url = f"https://{ZENDESK_SUBDOMAIN}.zendesk.com/api/v2/tickets.json"
     headers = {
@@ -78,10 +88,18 @@ def fetch_zendesk_tickets(limit=None):
 
     tickets = []
     while url:
-        response = requests.get(url, headers=headers)
-        if response.status_code != 200:
-            print(f"Failed to fetch tickets: {response.status_code} - {response.text}")
-            break
+        try:
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            if hasattr(e, 'response') and e.response is not None and e.response.status_code == 429:
+                retry_after = int(e.response.headers.get("Retry-After", 60))
+                print(f"Rate limited. Waiting for {retry_after} seconds...")
+                time.sleep(retry_after)
+                continue
+            else:
+                print(f"Failed to fetch tickets: {e}")
+                break
 
         data = response.json()
         tickets.extend(data.get("tickets", []))
@@ -94,86 +112,113 @@ def fetch_zendesk_tickets(limit=None):
 
     return tickets
 
-
 def fetch_ticket_comments(ticket_id):
-    """Fetch comments for a specific ticket."""
     url = f"https://{ZENDESK_SUBDOMAIN}.zendesk.com/api/v2/tickets/{ticket_id}/comments.json"
     headers = {
         "Authorization": f"Bearer {ZENDESK_TOKEN}",
         "Content-Type": "application/json",
     }
-
-    response = requests.get(url, headers=headers)
-    if response.status_code == 200:
+    
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
         return response.json().get("comments", [])
-    return []
+    except requests.exceptions.RequestException as e:
+        if hasattr(e, 'response') and e.response is not None and e.response.status_code == 429:
+            retry_after = int(e.response.headers.get("Retry-After", 60))
+            time.sleep(retry_after)
+            return fetch_ticket_comments(ticket_id)
+        print(f"Failed to fetch comments for ticket {ticket_id}: {e}")
+        return []
 
+def download_attachment(url, filename):
+    headers = {"Authorization": f"Bearer {ZENDESK_TOKEN}"}
+    local_path = os.path.join(TEMP_DIR, filename)
+    try:
+        with requests.get(url, headers=headers, stream=True) as r:
+            r.raise_for_status()
+            with open(local_path, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
+        return local_path
+    except requests.exceptions.RequestException as e:
+        print(f"Failed to download attachment {filename}: {e}")
+        return None
 
-def ingest_data(conn, tickets):
-    """Insert tickets and comments into MariaDB."""
-    cursor = conn.cursor()
+def ingest_to_rag_api(file_path, metadata, token):
+    headers = {"Authorization": f"Bearer {token}"}
+    
+    try:
+        with open(file_path, 'rb') as f:
+            files = {'file': (os.path.basename(file_path), f)}
+            data = {'metadata': json.dumps(metadata)}
+            
+            response = requests.post(
+                f"{RAG_API_URL}/documents/ingest",
+                headers=headers,
+                files=files,
+                data=data
+            )
+            response.raise_for_status()
+            print(f"Successfully ingested {os.path.basename(file_path)}")
+            return True
+    except requests.exceptions.RequestException as e:
+        print(f"Failed to ingest {os.path.basename(file_path)}: {e}")
+        if hasattr(e, 'response') and e.response is not None:
+            print(f"Response: {e.response.text}")
+        return False
 
-    print(f"Ingesting {len(tickets)} tickets into MariaDB...")
+def ingest_data(tickets, token):
+    print(f"Processing and ingesting {len(tickets)} tickets into RAG API...")
 
     for ticket in tickets:
-        # Convert tags list to comma-separated string
-        tags = ",".join(ticket.get("tags", []))
-
-        # Insert Ticket
-        try:
-            cursor.execute(
-                """
-                INSERT INTO tickets (id, subject, description, status, created_at, updated_at, requester_id, assignee_id, tags)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE 
-                subject=VALUES(subject), description=VALUES(description), status=VALUES(status), 
-                updated_at=VALUES(updated_at), tags=VALUES(tags)
-            """,
-                (
-                    ticket["id"],
-                    ticket.get("subject", ""),
-                    ticket.get("description", ""),
-                    ticket.get("status", ""),
-                    ticket.get("created_at", "").replace("T", " ").replace("Z", ""),
-                    ticket.get("updated_at", "").replace("T", " ").replace("Z", ""),
-                    ticket.get("requester_id"),
-                    ticket.get("assignee_id"),
-                    tags,
-                ),
-            )
-
-            # Fetch and Insert Comments
-            comments = fetch_ticket_comments(ticket["id"])
-            for comment in comments:
-                cursor.execute(
-                    """
-                    INSERT INTO ticket_comments (id, ticket_id, body, author_id, created_at)
-                    VALUES (?, ?, ?, ?, ?)
-                    ON DUPLICATE KEY UPDATE body=VALUES(body)
-                """,
-                    (
-                        comment["id"],
-                        ticket["id"],
-                        comment.get("body", ""),
-                        comment.get("author_id"),
-                        comment.get("created_at", "")
-                        .replace("T", " ")
-                        .replace("Z", ""),
-                    ),
-                )
-
-            conn.commit()
-            print(f"Successfully ingested ticket #{ticket['id']}")
-
-        except mariadb.Error as e:
-            print(f"Error inserting ticket {ticket['id']}: {e}")
-            conn.rollback()
-
+        ticket_id = ticket["id"]
+        print(f"Processing ticket #{ticket_id}...")
+        
+        # 1. Fetch comments and build summary
+        comments = fetch_ticket_comments(ticket_id)
+        
+        summary_md = f"# Ticket #{ticket_id}: {ticket.get('subject', 'No Subject')}\n\n"
+        summary_md += f"**Status:** {ticket.get('status', 'unknown')}\n"
+        summary_md += f"**Created:** {ticket.get('created_at')}\n\n"
+        summary_md += f"## Description\n{ticket.get('description', '')}\n\n"
+        summary_md += "## Comments\n"
+        
+        attachments = []
+        for comment in comments:
+            summary_md += f"### Comment by {comment.get('author_id')} at {comment.get('created_at')}\n"
+            summary_md += f"{comment.get('body', '')}\n\n"
+            if comment.get("attachments"):
+                attachments.extend(comment["attachments"])
+                
+        # Save summary to temp file
+        summary_filename = f"ticket_{ticket_id}_summary.md"
+        summary_path = os.path.join(TEMP_DIR, summary_filename)
+        with open(summary_path, "w", encoding="utf-8") as f:
+            f.write(summary_md)
+            
+        # Generate metadata and ingest summary
+        metadata = generate_metadata(ticket, is_attachment=False)
+        if ingest_to_rag_api(summary_path, metadata, token):
+            os.remove(summary_path)
+            
+        # 2. Process attachments
+        for att in attachments:
+            att_filename = f"ticket_{ticket_id}_{att['file_name']}"
+            att_url = att['content_url']
+            
+            print(f"  Downloading attachment: {att_filename}...")
+            local_att_path = download_attachment(att_url, att_filename)
+            
+            if local_att_path:
+                att_metadata = generate_metadata(ticket, is_attachment=True, attachment_name=att['file_name'])
+                if ingest_to_rag_api(local_att_path, att_metadata, token):
+                    os.remove(local_att_path)
 
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Ingest Zendesk Data into MariaDB")
+    parser = argparse.ArgumentParser(description="Ingest Zendesk Data into MariaDB AI RAG via API")
     parser.add_argument(
         "--limit",
         type=int,
@@ -183,21 +228,15 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if not ZENDESK_SUBDOMAIN or not ZENDESK_TOKEN:
-        print(
-            "Error: ZENDESK_SUBDOMAIN and ZENDESK_OAUTH_TOKEN environment variables must be set in .env"
-        )
+        print("Error: ZENDESK_SUBDOMAIN and ZENDESK_OAUTH_TOKEN environment variables must be set in .env")
         sys.exit(1)
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    setup_database(cursor)
-
+    rag_token = get_rag_api_token()
     tickets = fetch_zendesk_tickets(limit=args.limit)
+    
     if tickets:
-        ingest_data(conn, tickets)
+        ingest_data(tickets, rag_token)
     else:
         print("No tickets found to ingest.")
 
-    conn.close()
     print("Ingestion complete.")
