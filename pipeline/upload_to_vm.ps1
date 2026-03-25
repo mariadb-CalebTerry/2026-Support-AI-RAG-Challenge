@@ -37,7 +37,36 @@ try {
     ssh -i "$sshKeyPath" -o StrictHostKeyChecking=no -p 2222 "$sshUser@localhost" "mkdir -p $RemoteDir"
 
     Write-Host "Uploading pipeline files to the VM..." -ForegroundColor Cyan
-    scp -i "$sshKeyPath" -o StrictHostKeyChecking=no -P 2222 -r $LocalPipelineDir "$sshUser@localhost`:$RemoteDir"
+    # Create a temporary directory excluding unwanted folders
+    $tempDir = "$env:TEMP\ai_rag_upload_$(Get-Random)"
+    New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+    
+    try {
+        # Copy pipeline files excluding unwanted directories
+        Write-Host "Preparing files for upload (excluding __pycache__, logs, uploaded_files)..." -ForegroundColor Cyan
+        Get-ChildItem -Path $LocalPipelineDir | Where-Object { 
+            $_.Name -notin @("__pycache__", "logs", "uploaded_files") -and 
+            !$_.Name.StartsWith("__pycache__") 
+        } | ForEach-Object {
+            $targetPath = Join-Path $tempDir $_.Name
+            if ($_.PSIsContainer) {
+                # Recursively copy directory excluding __pycache__
+                robocopy $_.FullName $targetPath /E /XD "__pycache__" /NFL /NDL /NJH /NJS
+            }
+            else {
+                Copy-Item -Path $_.FullName -Destination $targetPath -Recurse -Force
+            }
+        }
+        
+        # Upload the cleaned directory
+        scp -i "$sshKeyPath" -o StrictHostKeyChecking=no -P 2222 -r "$tempDir\*" "$sshUser@localhost`:$RemoteDir/pipeline"
+    }
+    finally {
+        # Clean up temporary directory
+        if (Test-Path $tempDir) {
+            Remove-Item -Path $tempDir -Recurse -Force
+        }
+    }
 
     Write-Host "Uploading credential files..." -ForegroundColor Cyan
     scp -i "$sshKeyPath" -o StrictHostKeyChecking=no -P 2222 "$LocalCredentialDir\mariadb_token.txt" "$sshUser@localhost`:$RemoteDir/"

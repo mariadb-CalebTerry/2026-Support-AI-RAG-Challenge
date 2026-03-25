@@ -39,6 +39,44 @@ echo "Starting and enabling Docker service..."
 sudo systemctl start docker
 sudo systemctl enable docker
 
+echo "Configuring Docker to use mounted disks..."
+# Stop Docker service
+sudo systemctl stop docker
+
+# Create Docker data directories on mounted disk
+sudo mkdir -p /data/docker /data/containerd-data
+
+# Configure Docker to use the new data directory
+sudo tee /etc/docker/daemon.json > /dev/null << EOF
+{
+  "data-root": "/data/docker",
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  }
+}
+EOF
+
+# Configure containerd to use the new data directory
+sudo tee /etc/containerd/config.toml > /dev/null << EOF
+version = 2
+root = "/data/containerd-data"
+EOF
+
+# Move existing containerd data if it exists
+if [ -d "/var/lib/containerd" ] && [ "$(ls -A /var/lib/containerd)" ]; then
+    echo "Moving existing containerd data to mounted disk..."
+    sudo mv /var/lib/containerd/* /data/containerd-data/ 2>/dev/null || true
+fi
+
+# Start Docker service with new configuration
+sudo systemctl restart containerd
+sudo systemctl start docker
+sudo systemctl daemon-reload
+
+echo "Docker and containerd configured to use mounted disks"
+
 echo "Adding current user to docker group..."
 sudo usermod -aG docker $USER
 
@@ -51,7 +89,6 @@ if df -h | grep -q "/data"; then
     echo "Data disk is already mounted"
 else
     echo "Data disk not mounted. Running disk configuration..."
-    cd /tmp/ai_rag_challenge_scripts/pipeline
     bash configure_disks.sh
     echo "Disk configuration completed. Verifying mounts..."
     df -h | grep -q "/data" && echo "/data is now mounted" || echo "ERROR: /data still not mounted"
