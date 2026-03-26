@@ -20,13 +20,7 @@ This project sets up a shared GCP VM environment hosting MariaDB AI RAG 1.1 (Bet
 - All scripts and credentials uploaded to VM
 - MariaDB Enterprise token available for authentication
 - Dedicated disks (64GB data, 32GB logs) attached and ready
-
-⚠️ **Manual Steps Required:**
-
-- Configure and mount dedicated disks
-- Docker login to MariaDB registry
-- Complete AI RAG container deployment
-- Service verification and testing
+- Automated AI RAG container deployment script ready
 
 ## Manual Configuration Instructions
 
@@ -36,83 +30,26 @@ This project sets up a shared GCP VM environment hosting MariaDB AI RAG 1.1 (Bet
 .\pipeline\connect_vm.ps1
 ```
 
-### 2. Configure Dedicated Disks
+### 2. Run the Automated Setup Script
 
-First, mount the dedicated disks to provide sufficient space for Docker images and data:
+The `setup_docker_ai_rag.sh` script automates the process of configuring dedicated disks, installing Docker, and deploying the AI RAG stack:
 
 ```bash
 cd /tmp/ai_rag_challenge_scripts/pipeline
-bash configure_disks.sh
+bash setup_docker_ai_rag.sh
 ```
 
-This will:
-
-- Format and mount `/data` (64GB) for MariaDB data, Redis data, and uploaded files
-- Format and mount `/logs` (32GB) for application logs
-- Create required directories with proper permissions
-
-### 3. Navigate to Deployment Directory
-
-```bash
-cd /data/mariadb-rag-deployment
-```
-
-### 4. Login to MariaDB Docker Registry
-
-Use the MariaDB Enterprise token to authenticate:
-
-```bash
-sudo docker login docker.mariadb.com -u token -p 87e2f31b-c33e-4b10-82e6-3a6b64600319
-```
-
-### 5. Verify Configuration Files
-
-Check that the configuration files exist and have correct permissions:
-
-```bash
-# List files
-ls -la
-
-# Verify config file
-cat config.env.secure
-
-# Check permissions (should be 600)
-ls -l config.env.secure
-```
-
-### 6. Deploy the AI RAG Stack
-
-#### Option A: Full Stack (if all images are accessible)
-
-```bash
-sudo docker compose -f docker-compose.dockerhub-dev.yml --env-file config.env.secure up -d
-```
-
-#### Option B: Basic Stack (if some images aren't accessible)
-
-```bash
-# Start with basic services first
-sudo docker compose -f docker-compose.basic.yml up -d
-
-# Then try adding AI RAG services
-sudo docker compose -f docker-compose.fixed.yml --env-file config.env.secure up -d
-```
-
-### 7. Verify Deployment
+### 3. Verify Deployment
 
 ```bash
 # Check container status
-sudo docker compose ps
+sudo docker compose -f /data/mariadb-rag-deployment/docker-compose.yml ps
 
 # Check logs for any issues
-sudo docker compose logs
-
-# Verify specific services
-sudo docker compose logs rag-api
-sudo docker compose logs mysql-db
+sudo docker compose -f /data/mariadb-rag-deployment/docker-compose.yml logs
 ```
 
-### 8. Test Health Endpoints
+### 4. Test Health Endpoints
 
 ```bash
 # Test RAG API health
@@ -122,10 +59,10 @@ curl http://localhost:8000/health
 curl http://localhost:8002/health
 
 # Test database connection
-sudo docker exec rag-mariadb mysql -u root -pmariadb_rag_password_2024 -e "SHOW DATABASES;"
+sudo docker exec rag-mariadb mariadb -u root -pmariadb_rag_password_2024 -e "SHOW DATABASES;"
 ```
 
-### 9. Access Services
+### 5. Access Services
 
 Get the external IP for external access:
 
@@ -187,7 +124,7 @@ If images fail to pull:
 If services don't start properly:
 
 1. Check logs: `sudo docker compose logs <service-name>`
-2. Verify configuration: `cat config.env.secure`
+2. Verify configuration: `cat config.env`
 3. Check license key is properly formatted
 4. Ensure ports aren't already in use
 
@@ -207,6 +144,7 @@ The following credentials are available on the VM at `/tmp/ai_rag_challenge_scri
 - **MariaDB Enterprise Token**: `mariadb_token.txt`
 - **Gemini API Key**: `gemini_key.txt`
 - **MariaDB License Key**: `rag_license.txt`
+- **Docker PAT**: `docker_pat.txt`
 
 ## Pipeline Scripts
 
@@ -219,9 +157,9 @@ The following credentials are available on the VM at `/tmp/ai_rag_challenge_scri
 ### Docker Deployment
 
 - `configure_disks.sh`: Formats and mounts dedicated disks for data and logs
-- `setup_docker_ai_rag.sh`: Automated Docker setup script (requires manual completion)
+- `setup_docker_ai_rag.sh`: Automated Docker setup script (configures disks, installs Docker, deploys RAG stack)
 - `docker-compose.yml`: Updated Docker Compose configuration using mounted disks
-- `config.env.secure`: Environment configuration with credentials
+- `config.env`: Environment configuration with credentials
 
 ### API-First Data Ingestion
 
@@ -263,7 +201,7 @@ sudo docker compose down
 sudo docker compose restart
 
 # Update configuration
-# Edit config.env.secure then:
+# Edit config.env then:
 sudo docker compose down && sudo docker compose up -d
 ```
 

@@ -34,7 +34,7 @@ $sshKeyPath = "$env:USERPROFILE\.ssh\google_compute_engine"
 
 try {
     Write-Host "Creating remote directory..." -ForegroundColor Cyan
-    ssh -i "$sshKeyPath" -o StrictHostKeyChecking=no -p 2222 "$sshUser@localhost" "mkdir -p $RemoteDir"
+    ssh -i "$sshKeyPath" -o StrictHostKeyChecking=no -p 2222 "$sshUser@localhost" "mkdir -p $RemoteDir/pipeline"
 
     Write-Host "Uploading pipeline files to the VM..." -ForegroundColor Cyan
     # Create a temporary directory excluding unwanted folders
@@ -72,6 +72,7 @@ try {
     scp -i "$sshKeyPath" -o StrictHostKeyChecking=no -P 2222 "$LocalCredentialDir\mariadb_token.txt" "$sshUser@localhost`:$RemoteDir/"
     scp -i "$sshKeyPath" -o StrictHostKeyChecking=no -P 2222 "$LocalCredentialDir\gemini_key.txt" "$sshUser@localhost`:$RemoteDir/"
     scp -i "$sshKeyPath" -o StrictHostKeyChecking=no -P 2222 "$LocalCredentialDir\rag_license.txt" "$sshUser@localhost`:$RemoteDir/"
+    scp -i "$sshKeyPath" -o StrictHostKeyChecking=no -P 2222 "$LocalCredentialDir\docker_pat.txt" "$sshUser@localhost`:$RemoteDir/"
 }
 finally {
     if (-not $tunnelProcess.HasExited) {

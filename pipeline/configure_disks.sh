@@ -13,7 +13,9 @@ if ! mountpoint -q /data; then
     # Use standard GCP device names
     sudo mkfs.ext4 -m 0 -F -E lazy_itable_init=0,lazy_journal_init=0,discard /dev/disk/by-id/google-data-disk
     sudo mount -o discard,defaults /dev/disk/by-id/google-data-disk /data
-    echo "/dev/disk/by-id/google-data-disk /data ext4 discard,defaults 0 2" | sudo tee -a /etc/fstab
+    if ! grep -q "/data" /etc/fstab; then
+        echo "/dev/disk/by-id/google-data-disk /data ext4 discard,defaults 0 2" | sudo tee -a /etc/fstab
+    fi
 fi
 
 # Format and mount log disk if not already mounted
@@ -22,7 +24,9 @@ if ! mountpoint -q /logs; then
     sudo mkdir -p /logs
     sudo mkfs.ext4 -m 0 -F -E lazy_itable_init=0,lazy_journal_init=0,discard /dev/disk/by-id/google-log-disk
     sudo mount -o discard,defaults /dev/disk/by-id/google-log-disk /logs
-    echo "/dev/disk/by-id/google-log-disk /logs ext4 discard,defaults 0 2" | sudo tee -a /etc/fstab
+    if ! grep -q "/logs" /etc/fstab; then
+        echo "/dev/disk/by-id/google-log-disk /logs ext4 discard,defaults 0 2" | sudo tee -a /etc/fstab
+    fi
 fi
 
 echo "Setting permissions for MariaDB directories..."

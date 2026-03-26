@@ -181,4 +181,5 @@ service-account-key.json
 gemini_key.txt
 mariadb_token.txt
 rag_license.txt
+docker_pat.txt
 *config.env*

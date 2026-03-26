@@ -42,19 +42,23 @@ gcloud compute instances create $VmName `
     --create-disk="name=$VmName-data,size=64GB,type=pd-ssd,auto-delete=yes,device-name=data-disk" `
     --create-disk="name=$VmName-logs,size=32GB,type=pd-standard,auto-delete=yes,device-name=log-disk"
 
-Write-Host "Creating firewall rule to allow SSH via IAP..." -ForegroundColor Cyan
+Write-Host "Creating firewall rule to allow SSH and RAG services via IAP..." -ForegroundColor Cyan
 # Check if firewall rule already exists to prevent errors on re-runs
 $fwRuleExists = gcloud compute firewall-rules list --filter="name=allow-ssh-from-iap" --format="value(name)"
 if (-not $fwRuleExists) {
     gcloud compute firewall-rules create allow-ssh-from-iap `
         --direction=INGRESS `
         --action=allow `
-        --rules=tcp:22 `
+        --rules=tcp:22, tcp:8000, tcp:8002 `
         --source-ranges=35.235.240.0/20 `
         --target-tags="iap"
 }
 else {
-    Write-Host "Firewall rule 'allow-ssh-from-iap' already exists. Skipping." -ForegroundColor Yellow
+    Write-Host "Firewall rule 'allow-ssh-from-iap' already exists. Updating to include RAG ports..." -ForegroundColor Yellow
+    gcloud compute firewall-rules update allow-ssh-from-iap `
+        --allow tcp:22 --allow tcp:8000 --allow tcp:8002 `
+        --source-ranges=35.235.240.0/20 `
+        --target-tags="iap"
 }
 
 Write-Host ""

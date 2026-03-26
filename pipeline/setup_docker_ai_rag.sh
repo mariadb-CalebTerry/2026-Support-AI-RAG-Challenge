@@ -10,6 +10,7 @@ echo "Starting MariaDB AI RAG Docker deployment..."
 MARIADB_TOKEN=$(cat /tmp/ai_rag_challenge_scripts/mariadb_token.txt)
 GEMINI_API_KEY=$(cat /tmp/ai_rag_challenge_scripts/gemini_key.txt)
 MARIADB_LICENSE_KEY=$(cat /tmp/ai_rag_challenge_scripts/rag_license.txt)
+DOCKER_PAT=$(cat /tmp/ai_rag_challenge_scripts/docker_pat.txt)
 
 echo "Updating system and installing prerequisites..."
 sudo apt-get update
@@ -89,7 +90,7 @@ if df -h | grep -q "/data"; then
     echo "Data disk is already mounted"
 else
     echo "Data disk not mounted. Running disk configuration..."
-    bash configure_disks.sh
+    bash /tmp/ai_rag_challenge_scripts/pipeline/configure_disks.sh
     echo "Disk configuration completed. Verifying mounts..."
     df -h | grep -q "/data" && echo "/data is now mounted" || echo "ERROR: /data still not mounted"
     df -h | grep -q "/logs" && echo "/logs is now mounted" || echo "ERROR: /logs still not mounted"
@@ -105,7 +106,7 @@ sudo chown -R $USER:$USER /data/uploaded_files /data/redis /logs/rag
 
 echo "Downloading Docker Compose configuration..."
 if [ ! -f "docker-compose.yml" ]; then
-    sudo curl -fsSL https://raw.githubusercontent.com/mariadb-corporation/mariadb-docs/refs/heads/main/tools/docker-compose.dockerhub-dev.yml -o docker-compose.yml
+    sudo cp /tmp/ai_rag_challenge_scripts/pipeline/docker-compose.yml docker-compose.yml
     sudo chown $USER:$USER docker-compose.yml
 else
     echo "docker-compose.yml already exists, skipping download"
@@ -119,36 +120,39 @@ MCP_AUTH_SECRET_KEY=$SECRET_KEY
 echo "Creating configuration file with credentials..."
 if [ ! -f "config.env" ]; then
     # Use the existing config.env as template
-    sudo cp /tmp/ai_rag_challenge_scripts/pipeline/config.env config.env
+    sudo cp /tmp/ai_rag_challenge_scripts/pipeline/config.env .env
     
     # Update with the actual credentials read earlier
-    sudo sed -i "s/GEMINI_API_KEY=.*/GEMINI_API_KEY=$GEMINI_API_KEY/" config.env
-    sudo sed -i "s/MARIADB_LICENSE_KEY=.*/MARIADB_LICENSE_KEY=$MARIADB_LICENSE_KEY/" config.env
+    sudo sed -i "s/GEMINI_API_KEY=.*/GEMINI_API_KEY=$GEMINI_API_KEY/" .env
+    sudo sed -i "s/MARIADB_LICENSE_KEY=.*/MARIADB_LICENSE_KEY=$MARIADB_LICENSE_KEY/" .env
     
     # Generate new secure keys and update them
     SECRET_KEY=$(openssl rand -hex 32)
-    sudo sed -i "s/SECRET_KEY=.*/SECRET_KEY=$SECRET_KEY/" config.env
-    sudo sed -i "s/JWT_SECRET_KEY=.*/JWT_SECRET_KEY=$SECRET_KEY/" config.env
-    sudo sed -i "s/MCP_AUTH_SECRET_KEY=.*/MCP_AUTH_SECRET_KEY=$SECRET_KEY/" config.env
+    sudo sed -i "s/SECRET_KEY=.*/SECRET_KEY=$SECRET_KEY/" .env
+    sudo sed -i "s/JWT_SECRET_KEY=.*/JWT_SECRET_KEY=$SECRET_KEY/" .env
+    sudo sed -i "s/MCP_AUTH_SECRET_KEY=.*/MCP_AUTH_SECRET_KEY=$SECRET_KEY/" .env
     
-    sudo chown $USER:$USER config.env
+    sudo chown $USER:$USER .env
 else
-    echo "config.env already exists, skipping creation"
+    echo ".env already exists, skipping creation"
 fi
 
 echo "Setting proper permissions..."
-chmod 600 config.env
+chmod 600 .env
 sudo chmod 755 /data/uploaded_files /logs/rag
 
+echo "Logging into Docker..."
+echo "$DOCKER_PAT" | sudo docker login -u calebterrymdb --password-stdin
+
 echo "Pulling Docker images..."
-if docker compose -f docker-compose.yml --env-file config.env pull; then
+if docker compose -f docker-compose.yml --env-file .env pull; then
     echo "Docker images pulled successfully"
 else
     echo "Warning: Some images may have failed to pull, continuing..."
 fi
 
 echo "Starting MariaDB AI RAG stack..."
-if docker compose -f docker-compose.yml --env-file config.env up -d; then
+if docker compose -f docker-compose.yml --env-file .env up -d; then
     echo "Docker stack started successfully"
 else
     echo "Error: Failed to start Docker stack"
@@ -159,7 +163,7 @@ echo "Waiting for services to be ready..."
 sleep 30
 
 echo "Checking service status..."
-docker compose -f docker-compose.yml --env-file config.env ps
+docker compose -f docker-compose.yml --env-file .env ps
 
 echo "Waiting for database initialization..."
 sleep 60
