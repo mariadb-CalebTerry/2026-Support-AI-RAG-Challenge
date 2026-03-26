@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from requests_toolbelt import MultipartEncoder
 
 # Load environment variables
-load_dotenv()
+load_dotenv("config.env")
 
 ZENDESK_SUBDOMAIN = os.getenv("ZENDESK_SUBDOMAIN")
 ZENDESK_TOKEN = os.getenv("ZENDESK_OAUTH_TOKEN")
@@ -68,6 +68,26 @@ def get_rag_api_token():
         sys.exit(1)
 
 
+def generate_org_metadata(org):
+    return {
+        "org_id": org.get("id"),
+        "name": org.get("name"),
+        "source": "zendesk",
+        "type": "organization",
+    }
+
+
+def generate_user_metadata(user):
+    return {
+        "user_id": user.get("id"),
+        "name": user.get("name"),
+        "email": user.get("email"),
+        "role": user.get("role"),
+        "source": "zendesk",
+        "type": "user",
+    }
+
+
 def generate_metadata(ticket, is_attachment=False, attachment_name=None):
     subject = ticket.get("subject", "").lower() if ticket.get("subject") else ""
     description = (
@@ -114,9 +134,91 @@ def generate_metadata(ticket, is_attachment=False, attachment_name=None):
     return metadata
 
 
-def fetch_zendesk_tickets(limit=None):
-    print(f"Fetching tickets from Zendesk (Limit: {limit if limit else 'None'})...")
-    url = f"https://{ZENDESK_SUBDOMAIN}.zendesk.com/api/v2/tickets.json"
+def fetch_zendesk_organizations(org_ids):
+    if not org_ids:
+        return []
+
+    print(f"Fetching {len(org_ids)} associated organizations from Zendesk...")
+
+    # Zendesk show_many takes max 100 IDs at a time
+    chunk_size = 100
+    organizations = []
+
+    for i in range(0, len(org_ids), chunk_size):
+        chunk = org_ids[i : i + chunk_size]
+        ids_str = ",".join(map(str, chunk))
+        url = f"https://{ZENDESK_SUBDOMAIN}.zendesk.com/api/v2/organizations/show_many.json?ids={ids_str}"
+
+        headers = {
+            "Authorization": f"Bearer {ZENDESK_TOKEN}",
+            "Content-Type": "application/json",
+        }
+
+        try:
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+            organizations.extend(data.get("organizations", []))
+        except requests.exceptions.RequestException as e:
+            if (
+                hasattr(e, "response")
+                and e.response is not None
+                and e.response.status_code == 429
+            ):
+                retry_after = int(e.response.headers.get("Retry-After", 60))
+                print(f"Rate limited. Waiting for {retry_after} seconds...")
+                time.sleep(retry_after)
+                # We would normally retry here, but keeping it simple for now
+            else:
+                print(f"Failed to fetch organization chunk: {e}")
+
+    return organizations
+
+
+def fetch_zendesk_users(user_ids):
+    if not user_ids:
+        return []
+
+    print(f"Fetching {len(user_ids)} associated users from Zendesk...")
+
+    # Zendesk show_many takes max 100 IDs at a time
+    chunk_size = 100
+    users = []
+
+    for i in range(0, len(user_ids), chunk_size):
+        chunk = user_ids[i : i + chunk_size]
+        ids_str = ",".join(map(str, chunk))
+        url = f"https://{ZENDESK_SUBDOMAIN}.zendesk.com/api/v2/users/show_many.json?ids={ids_str}"
+
+        headers = {
+            "Authorization": f"Bearer {ZENDESK_TOKEN}",
+            "Content-Type": "application/json",
+        }
+
+        try:
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+            users.extend(data.get("users", []))
+        except requests.exceptions.RequestException as e:
+            if (
+                hasattr(e, "response")
+                and e.response is not None
+                and e.response.status_code == 429
+            ):
+                retry_after = int(e.response.headers.get("Retry-After", 60))
+                print(f"Rate limited. Waiting for {retry_after} seconds...")
+                time.sleep(retry_after)
+            else:
+                print(f"Failed to fetch user chunk: {e}")
+
+    return users
+
+
+def fetch_zendesk_tickets(limit=1000):
+    print(f"Fetching up to {limit} tickets with attachments from Zendesk...")
+    # Use Search API to filter specifically for tickets with attachments
+    url = f"https://{ZENDESK_SUBDOMAIN}.zendesk.com/api/v2/search.json?query=type:ticket has_attachment:true"
     headers = {
         "Authorization": f"Bearer {ZENDESK_TOKEN}",
         "Content-Type": "application/json",
@@ -142,9 +244,10 @@ def fetch_zendesk_tickets(limit=None):
                 break
 
         data = response.json()
-        tickets.extend(data.get("tickets", []))
+        # Search API returns results array instead of tickets array
+        tickets.extend(data.get("results", []))
 
-        if limit and len(tickets) >= limit:
+        if len(tickets) >= limit:
             tickets = tickets[:limit]
             break
 
@@ -177,44 +280,51 @@ def fetch_ticket_comments(ticket_id):
         return []
 
 
+import re
+
+
+def sanitize_filename(filename):
+    """Remove invalid characters for Windows/Linux filesystems."""
+    # Replace any character that isn't alphanumeric, dash, underscore, or period with an underscore
+    return re.sub(r"[^\w\-\.]", "_", filename)
+
+
 def download_attachment(url, filename):
-    headers = {"Authorization": f"Bearer {ZENDESK_TOKEN}"}
-    local_path = os.path.join(TEMP_DIR, filename)
+    print(f"  Downloading attachment: {filename}...")
+    safe_filename = sanitize_filename(filename)
+    local_path = os.path.join(TEMP_DIR, safe_filename)
     try:
-        with requests.get(url, headers=headers, stream=True) as r:
-            r.raise_for_status()
-            with open(local_path, "wb") as f:
-                for chunk in r.iter_content(chunk_size=8192):
+        response = requests.get(url, stream=True)
+        response.raise_for_status()
+        with open(local_path, "wb") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
                     f.write(chunk)
         return local_path
     except requests.exceptions.RequestException as e:
-        print(f"Failed to download attachment {filename}: {e}")
+        print(f"Failed to download attachment {safe_filename}: {e}")
         return None
 
 
 def ingest_to_rag_api(file_path, metadata, token):
     try:
         with open(file_path, "rb") as f:
-            m = MultipartEncoder(
-                fields={
-                    "file": (
-                        os.path.basename(file_path),
-                        f,
-                        "application/octet-stream",
-                    ),
-                    "metadata": json.dumps(metadata),
-                }
-            )
             headers = {
                 "Authorization": f"Bearer {token}",
-                "Content-Type": m.content_type,
             }
+            files = {
+                "files": (os.path.basename(file_path), f, "application/octet-stream")
+            }
+            data = {"metadata": json.dumps(metadata)}
 
             response = requests.post(
-                f"{RAG_API_URL}/documents/ingest", headers=headers, data=m
+                f"{RAG_API_URL}/documents/ingest",
+                headers=headers,
+                files=files,
+                data=data,
             )
             response.raise_for_status()
-            print(f"Successfully ingested {os.path.basename(file_path)}")
+            print(f"Successfully queued {os.path.basename(file_path)} for ingestion")
             return True
     except requests.exceptions.RequestException as e:
         print(f"Failed to ingest {os.path.basename(file_path)}: {e}")
@@ -223,10 +333,72 @@ def ingest_to_rag_api(file_path, metadata, token):
         return False
 
 
-def ingest_data(tickets, token):
-    print(f"Processing and ingesting {len(tickets)} tickets into RAG API...")
+def ingest_data(organizations, users, tickets, token):
+    print(
+        f"Processing and ingesting {len(organizations)} orgs, {len(users)} users, and {len(tickets)} tickets into RAG API..."
+    )
     conn = setup_sqlite_db()
 
+    # 1. Process Organizations
+    print("Processing Organizations...")
+    for org in organizations:
+        org_id = org["id"]
+        org_item_id = f"org_{org_id}"
+
+        if not is_processed(conn, org_item_id):
+            summary_md = f"# Organization: {org.get('name', 'Unknown')}\n\n"
+            summary_md += f"**ID:** {org_id}\n"
+            summary_md += f"**Created:** {org.get('created_at')}\n"
+            if org.get("details"):
+                summary_md += f"**Details:** {org.get('details')}\n"
+            if org.get("notes"):
+                summary_md += f"**Notes:** {org.get('notes')}\n"
+
+            summary_filename = f"org_{org_id}_summary.md"
+            summary_path = os.path.join(TEMP_DIR, summary_filename)
+            with open(summary_path, "w", encoding="utf-8") as f:
+                f.write(summary_md)
+
+            metadata = generate_org_metadata(org)
+            if ingest_to_rag_api(summary_path, metadata, token):
+                mark_processed(conn, org_item_id)
+                os.remove(summary_path)
+        else:
+            print(f"  Organization {org_id} already processed. Skipping.")
+
+    # 2. Process Users (Requesters)
+    print("Processing Users...")
+    for user in users:
+        user_id = user["id"]
+        user_item_id = f"user_{user_id}"
+
+        if not is_processed(conn, user_item_id):
+            summary_md = f"# User: {user.get('name', 'Unknown')}\n\n"
+            summary_md += f"**ID:** {user_id}\n"
+            summary_md += f"**Email:** {user.get('email', 'N/A')}\n"
+            summary_md += f"**Role:** {user.get('role', 'N/A')}\n"
+            if user.get("organization_id"):
+                summary_md += f"**Organization ID:** {user.get('organization_id')}\n"
+            summary_md += f"**Created:** {user.get('created_at')}\n"
+            if user.get("details"):
+                summary_md += f"**Details:** {user.get('details')}\n"
+            if user.get("notes"):
+                summary_md += f"**Notes:** {user.get('notes')}\n"
+
+            summary_filename = f"user_{user_id}_summary.md"
+            summary_path = os.path.join(TEMP_DIR, summary_filename)
+            with open(summary_path, "w", encoding="utf-8") as f:
+                f.write(summary_md)
+
+            metadata = generate_user_metadata(user)
+            if ingest_to_rag_api(summary_path, metadata, token):
+                mark_processed(conn, user_item_id)
+                os.remove(summary_path)
+        else:
+            print(f"  User {user_id} already processed. Skipping.")
+
+    # 3. Process Tickets and Attachments
+    print("Processing Tickets...")
     for ticket in tickets:
         ticket_id = ticket["id"]
         ticket_item_id = f"ticket_{ticket_id}"
@@ -305,7 +477,7 @@ if __name__ == "__main__":
         "--limit",
         type=int,
         help="Limit the number of tickets to ingest (subset)",
-        default=None,
+        default=1000,
     )
     args = parser.parse_args()
 
@@ -316,11 +488,31 @@ if __name__ == "__main__":
         sys.exit(1)
 
     rag_token = get_rag_api_token()
+
+    # 1. Fetch the target tickets first
     tickets = fetch_zendesk_tickets(limit=args.limit)
 
-    if tickets:
-        ingest_data(tickets, rag_token)
-    else:
+    if not tickets:
         print("No tickets found to ingest.")
+        sys.exit(0)
+
+    # 2. Extract unique org and user IDs
+    org_ids = set()
+    user_ids = set()
+
+    for ticket in tickets:
+        if ticket.get("organization_id"):
+            org_ids.add(ticket["organization_id"])
+        if ticket.get("requester_id"):
+            user_ids.add(ticket["requester_id"])
+
+    # 3. Fetch only associated organizations and users
+    organizations = fetch_zendesk_organizations(list(org_ids))
+    users = fetch_zendesk_users(list(user_ids))
+
+    if organizations or users or tickets:
+        ingest_data(organizations, users, tickets, rag_token)
+    else:
+        print("No data found to ingest.")
 
     print("Ingestion complete.")

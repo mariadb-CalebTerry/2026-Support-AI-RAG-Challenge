@@ -183,3 +183,4 @@ mariadb_token.txt
 rag_license.txt
 docker_pat.txt
 *config.env*
+pipeline/ingestion_state.db

@@ -23,7 +23,7 @@ This project sets up a shared GCP VM environment hosting MariaDB AI RAG 1.1 (Bet
 - **Name:** `vm-ai-rag-challenge`
 - **Zone:** `us-east1-b`
 - **Machine Type:** `n2-standard-4` (4 vCPUs, 16GB Memory)
-- **OS:** Debian 12
+- **OS:** Ubuntu 22.04
 - **Access:** IAP (Identity-Aware Proxy) SSH only via TCP port 22
 
 ### Attached Disks
