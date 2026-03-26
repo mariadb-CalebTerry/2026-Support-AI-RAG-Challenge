@@ -306,7 +306,8 @@ def download_attachment(url, filename):
         return None
 
 
-def ingest_to_rag_api(file_path, metadata, token):
+def ingest_to_rag_api(file_path, metadata, get_token_func):
+    token = get_token_func()
     try:
         with open(file_path, "rb") as f:
             headers = {
@@ -323,6 +324,25 @@ def ingest_to_rag_api(file_path, metadata, token):
                 files=files,
                 data=data,
             )
+
+            # If token expired, get a new one and retry once
+            if response.status_code == 401:
+                print(
+                    "Token expired or invalid. Attempting to refresh token and retry..."
+                )
+                # Clear cached token if you had one, or let the function grab a new one
+                token = get_rag_api_token()
+                headers["Authorization"] = f"Bearer {token}"
+
+                # Need to seek back to start of file for the retry
+                f.seek(0)
+                response = requests.post(
+                    f"{RAG_API_URL}/documents/ingest",
+                    headers=headers,
+                    files=files,
+                    data=data,
+                )
+
             response.raise_for_status()
             print(f"Successfully queued {os.path.basename(file_path)} for ingestion")
             return True
@@ -333,7 +353,7 @@ def ingest_to_rag_api(file_path, metadata, token):
         return False
 
 
-def ingest_data(organizations, users, tickets, token):
+def ingest_data(organizations, users, tickets):
     print(
         f"Processing and ingesting {len(organizations)} orgs, {len(users)} users, and {len(tickets)} tickets into RAG API..."
     )
@@ -360,7 +380,7 @@ def ingest_data(organizations, users, tickets, token):
                 f.write(summary_md)
 
             metadata = generate_org_metadata(org)
-            if ingest_to_rag_api(summary_path, metadata, token):
+            if ingest_to_rag_api(summary_path, metadata, get_rag_api_token):
                 mark_processed(conn, org_item_id)
                 os.remove(summary_path)
         else:
@@ -391,7 +411,7 @@ def ingest_data(organizations, users, tickets, token):
                 f.write(summary_md)
 
             metadata = generate_user_metadata(user)
-            if ingest_to_rag_api(summary_path, metadata, token):
+            if ingest_to_rag_api(summary_path, metadata, get_rag_api_token):
                 mark_processed(conn, user_item_id)
                 os.remove(summary_path)
         else:
@@ -434,7 +454,7 @@ def ingest_data(organizations, users, tickets, token):
 
             # Generate metadata and ingest summary
             metadata = generate_metadata(ticket, is_attachment=False)
-            if ingest_to_rag_api(summary_path, metadata, token):
+            if ingest_to_rag_api(summary_path, metadata, get_rag_api_token):
                 mark_processed(conn, ticket_item_id)
                 os.remove(summary_path)
         else:
@@ -456,7 +476,9 @@ def ingest_data(organizations, users, tickets, token):
                     att_metadata = generate_metadata(
                         ticket, is_attachment=True, attachment_name=att["file_name"]
                     )
-                    if ingest_to_rag_api(local_att_path, att_metadata, token):
+                    if ingest_to_rag_api(
+                        local_att_path, att_metadata, get_rag_api_token
+                    ):
                         mark_processed(conn, att_item_id)
                         os.remove(local_att_path)
             else:
@@ -511,7 +533,7 @@ if __name__ == "__main__":
     users = fetch_zendesk_users(list(user_ids))
 
     if organizations or users or tickets:
-        ingest_data(organizations, users, tickets, rag_token)
+        ingest_data(organizations, users, tickets)
     else:
         print("No data found to ingest.")
 
