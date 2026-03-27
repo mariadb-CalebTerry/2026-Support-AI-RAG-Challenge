@@ -38,14 +38,14 @@ foreach ($port in $Ports) {
 }
 Write-Host "Press Ctrl+C to stop all tunnels" -ForegroundColor Yellow
 
-$tunnelProcesses = @()
+$tunnels = @()
 
 try {
     # Start all tunnel processes
     foreach ($port in $Ports) {
         Write-Host "Starting tunnel for $($port.Service) on port $($port.RemotePort)..." -ForegroundColor Cyan
         $tunnelProcess = Start-Process -FilePath "cmd.exe" -ArgumentList "/c gcloud compute start-iap-tunnel $VmName $($port.RemotePort) --zone=$Zone --local-host-port=localhost:$($port.LocalPort)" -WindowStyle Hidden -PassThru
-        $tunnelProcesses += $tunnelProcess
+        $tunnels += @{ PortInfo = $port; Process = $tunnelProcess }
         Start-Sleep -Seconds 2  # Brief delay between starting tunnels
     }
     
@@ -61,15 +61,11 @@ try {
         Start-Sleep -Seconds 1
         
         # Check if any tunnel process has exited
-        foreach ($process in $tunnelProcesses) {
-            if ($process.HasExited) {
-                Write-Host "Warning: Tunnel process exited unexpectedly. Restarting..." -ForegroundColor Yellow
-                # Find which port this was for and restart it
-                $portInfo = $Ports | Where-Object { $_.RemotePort -eq 8000 } | Select-Object -First 1
-                if ($portInfo) {
-                    $newProcess = Start-Process -FilePath "cmd.exe" -ArgumentList "/c gcloud compute start-iap-tunnel $VmName $($portInfo.RemotePort) --zone=$Zone --local-host-port=localhost:$($portInfo.LocalPort)" -WindowStyle Hidden -PassThru
-                    $tunnelProcesses = $tunnelProcesses -replace $process, $newProcess
-                }
+        foreach ($tunnel in $tunnels) {
+            if ($tunnel.Process.HasExited) {
+                Write-Host "Warning: Tunnel process for $($tunnel.PortInfo.Service) (port $($tunnel.PortInfo.RemotePort)) exited unexpectedly. Restarting..." -ForegroundColor Yellow
+                $newProcess = Start-Process -FilePath "cmd.exe" -ArgumentList "/c gcloud compute start-iap-tunnel $VmName $($tunnel.PortInfo.RemotePort) --zone=$Zone --local-host-port=localhost:$($tunnel.PortInfo.LocalPort)" -WindowStyle Hidden -PassThru
+                $tunnel.Process = $newProcess
             }
         }
     }
@@ -79,9 +75,9 @@ catch {
 }
 finally {
     Write-Host "Stopping all IAP tunnels..." -ForegroundColor Cyan
-    foreach ($process in $tunnelProcesses) {
-        if (-not $process.HasExited) {
-            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+    foreach ($tunnel in $tunnels) {
+        if (-not $tunnel.Process.HasExited) {
+            Stop-Process -Id $tunnel.Process.Id -Force -ErrorAction SilentlyContinue
         }
     }
     

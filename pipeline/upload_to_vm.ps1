@@ -15,7 +15,7 @@ $ProjectId = "mariadb-rag-ai-challenge"
 $VmName = "vm-ai-rag-challenge"
 $Zone = "us-east1-b"
 $RemoteDir = "/tmp/ai_rag_challenge_scripts"
-$LocalPipelineDir = "C:\Projects\MariaDB\2026 Support AI RAG Challenge\pipeline"
+$LocalPipelineDir = "C:\Projects\MariaDB\2026 Support AI RAG Challenge\src"
 $LocalCredentialDir = "C:\Projects\MariaDB\2026 Support AI RAG Challenge"
 
 Write-Host "Setting Google Cloud project to $ProjectId..." -ForegroundColor Cyan

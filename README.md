@@ -35,7 +35,7 @@ If you are a member of the MariaDB Support & Services team looking to connect yo
 .
 ├── docs/
 │   └── SUPPORT_SERVICES_ONBOARDING.md  # Guide for connecting IDEs to the RAG MCP
-├── pipeline/
+├── src/
 │   ├── config.env                      # Configuration overrides (API keys, models)
 │   ├── configure_disks.sh              # Formats GCP disks for Docker
 │   ├── connect_vm.ps1                  # IAP SSH wrapper
@@ -55,11 +55,11 @@ If you are a member of the MariaDB Support & Services team looking to connect yo
 
 If you need to stand up this environment from scratch:
 
-1. Create a `pipeline/config.env` file using the necessary MariaDB tokens and Gemini API keys.
-2. Run `.\pipeline\provision_vm.ps1` to create the GCP infrastructure.
-3. Run `.\pipeline\upload_to_vm.ps1` to copy the setup scripts over.
-4. SSH into the box using `.\pipeline\connect_vm.ps1`.
-5. Run `bash /tmp/ai_rag_challenge_scripts/pipeline/setup_docker_ai_rag.sh` to install Docker and start the AI RAG stack.
+1. Create a `src/config.env` file using the necessary MariaDB tokens and Gemini API keys.
+2. Run `.\src\provision_vm.ps1` to create the GCP infrastructure.
+3. Run `.\src\upload_to_vm.ps1` to copy the setup scripts over.
+4. SSH into the box using `.\src\connect_vm.ps1`.
+5. Run `bash /tmp/ai_rag_challenge_scripts/src/setup_docker_ai_rag.sh` to install Docker and start the AI RAG stack.
 
 ### Running the Data Ingestion
 

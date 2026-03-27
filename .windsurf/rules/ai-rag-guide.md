@@ -44,10 +44,10 @@ This project sets up a shared GCP VM environment hosting MariaDB AI RAG 1.1 (Bet
 
 ## Key Files
 
-- `pipeline/provision_vm.ps1`: Idempotent script to create the GCP VM, attached disks, and IAP firewall rules.
-- `pipeline/upload_to_vm.ps1`: Securely copies the pipeline scripts to the VM, working around Windows SCP bugs.
-- `pipeline/connect_vm.ps1`: Wrapper to securely SSH into the VM, bypassing Windows ProxyCommand bugs.
-- `pipeline/configure_disks.sh`: Formats and mounts dedicated disks for data and logs.
-- `pipeline/setup_docker_ai_rag.sh`: Installs Docker and deploys MariaDB AI RAG stack.
-- `pipeline/docker-compose.yml`: Docker Compose configuration using mounted disks.
-- `pipeline/ingest_zendesk.py`: Idempotent Python script to fetch, chunk, embed, and insert Zendesk tickets into MariaDB via API.
+- `src/provision_vm.ps1`: Idempotent script to create the GCP VM, attached disks, and IAP firewall rules.
+- `src/upload_to_vm.ps1`: Securely copies the pipeline scripts to the VM, working around Windows SCP bugs.
+- `src/connect_vm.ps1`: Wrapper to securely SSH into the VM, bypassing Windows ProxyCommand bugs.
+- `src/configure_disks.sh`: Formats and mounts dedicated disks for data and logs.
+- `src/setup_docker_ai_rag.sh`: Installs Docker and deploys MariaDB AI RAG stack.
+- `src/docker-compose.yml`: Docker Compose configuration using mounted disks.
+- `src/ingest_zendesk.py`: Idempotent Python script to fetch, chunk, embed, and insert Zendesk tickets into MariaDB via API.

@@ -90,7 +90,7 @@ if df -h | grep -q "/data"; then
     echo "Data disk is already mounted"
 else
     echo "Data disk not mounted. Running disk configuration..."
-    bash /tmp/ai_rag_challenge_scripts/pipeline/configure_disks.sh
+    bash /tmp/ai_rag_challenge_scripts/src/configure_disks.sh
     echo "Disk configuration completed. Verifying mounts..."
     df -h | grep -q "/data" && echo "/data is now mounted" || echo "ERROR: /data still not mounted"
     df -h | grep -q "/logs" && echo "/logs is now mounted" || echo "ERROR: /logs still not mounted"
@@ -106,7 +106,7 @@ sudo chown -R $USER:$USER /data/uploaded_files /data/redis /logs/rag
 
 echo "Downloading Docker Compose configuration..."
 if [ ! -f "docker-compose.yml" ]; then
-    sudo cp /tmp/ai_rag_challenge_scripts/pipeline/docker-compose.yml docker-compose.yml
+    sudo cp /tmp/ai_rag_challenge_scripts/src/docker-compose.yml docker-compose.yml
     sudo chown $USER:$USER docker-compose.yml
 else
     echo "docker-compose.yml already exists, skipping download"
@@ -120,7 +120,7 @@ MCP_AUTH_SECRET_KEY=$SECRET_KEY
 echo "Creating configuration file with credentials..."
 if [ ! -f "config.env" ]; then
     # Use the existing config.env as template
-    sudo cp /tmp/ai_rag_challenge_scripts/pipeline/config.env .env
+    sudo cp /tmp/ai_rag_challenge_scripts/src/config.env .env
     
     # Update with the actual credentials read earlier
     sudo sed -i "s/GEMINI_API_KEY=.*/GEMINI_API_KEY=$GEMINI_API_KEY/" .env
