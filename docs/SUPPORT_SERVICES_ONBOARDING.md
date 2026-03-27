@@ -56,9 +56,37 @@ Once running, the following services are available to you:
 
 ---
 
-## 3. Connect your IDE via MCP
+## 3. Test the RAG API Connection
+
+Before configuring MCP, verify that the RAG API is accessible and functioning properly:
+
+1. **Test API Health**:
+   Open your browser or use curl to check the API status:
+
+   ```bash
+   curl http://localhost:8000/health
+   ```
+
+   You should see a healthy response indicating the service is running.
+
+2. **Generate Authentication Token**:
+   Create a token for MCP authentication:
+
+   ```bash
+   curl -X POST http://localhost:8000/token \
+     -H "Content-Type: application/json" \
+     -d '{"username": "admin@example.com", "password": "admin123"}'
+   ```
+
+   Save the returned token for the next step.
+
+---
+
+## 4. Connect your IDE via MCP
 
 The Model Context Protocol (MCP) allows your local AI coding assistant (like Windsurf) to natively understand and query the MariaDB vector database.
+
+**Important**: Ensure the RAG API is running and accessible before proceeding with MCP configuration.
 
 To connect your IDE to the MariaDB Support AI RAG system:
 
@@ -78,11 +106,7 @@ To connect your IDE to the MariaDB Support AI RAG system:
    ```
 
 2. **Authenticate the Server**:
-   Depending on your IDE's implementation, you may need to pass an authentication token. You can generate a token by making a POST request to `http://localhost:8000/token` with the credentials:
-   - **Username**: `admin@example.com`
-   - **Password**: `admin123`
-
-   _(If your IDE requires headers in the `mcp_config.json`, add an `Authorization: Bearer <TOKEN>` header. Otherwise, you can ask your AI assistant to authenticate itself using the `http://localhost:8000/token` endpoint)._
+   Use the token generated in the previous step. If your IDE requires headers in the `mcp_config.json`, add an `Authorization: Bearer <TOKEN>` header. Otherwise, you can ask your AI assistant to authenticate itself using the `http://localhost:8000/token` endpoint.
 
 3. **Verify the Connection**:
    In your IDE chat panel, ask the AI:
@@ -93,7 +117,7 @@ To connect your IDE to the MariaDB Support AI RAG system:
 
 ---
 
-## 4. Querying the Support Data
+## 5. Querying the Support Data
 
 The environment has already been pre-loaded with **1000 high-value Zendesk tickets** (including attachments) and their associated **Organizations** and **Users**.
 
