@@ -29,7 +29,7 @@ Make sure your active project is set to the correct GCP project hosting the RAG 
 
 ```bash
 # If you know the specific project ID, set it here:
-gcloud config set project [YOUR_PROJECT_ID]
+gcloud config set project mariadb-rag-ai-challenge
 ```
 
 ---
