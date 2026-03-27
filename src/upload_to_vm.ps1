@@ -34,7 +34,7 @@ $sshKeyPath = "$env:USERPROFILE\.ssh\google_compute_engine"
 
 try {
     Write-Host "Creating remote directory..." -ForegroundColor Cyan
-    ssh -i "$sshKeyPath" -o StrictHostKeyChecking=no -p 2222 "$sshUser@localhost" "mkdir -p $RemoteDir/src"
+    ssh -i "$sshKeyPath" -o StrictHostKeyChecking=accept-new -p 2222 "$sshUser@localhost" "mkdir -p $RemoteDir/src"
 
     Write-Host "Uploading src files to the VM..." -ForegroundColor Cyan
     # Create a temporary directory excluding unwanted folders
@@ -59,7 +59,7 @@ try {
         }
         
         # Upload the cleaned directory
-        scp -i "$sshKeyPath" -o StrictHostKeyChecking=no -P 2222 -r "$tempDir\*" "$sshUser@localhost`:$RemoteDir/src"
+        scp -i "$sshKeyPath" -o StrictHostKeyChecking=accept-new -P 2222 -r "$tempDir\*" "$sshUser@localhost`:$RemoteDir/src"
     }
     finally {
         # Clean up temporary directory
@@ -69,10 +69,10 @@ try {
     }
 
     Write-Host "Uploading credential files..." -ForegroundColor Cyan
-    scp -i "$sshKeyPath" -o StrictHostKeyChecking=no -P 2222 "$LocalCredentialDir\mariadb_token.txt" "$sshUser@localhost`:$RemoteDir/"
-    scp -i "$sshKeyPath" -o StrictHostKeyChecking=no -P 2222 "$LocalCredentialDir\gemini_key.txt" "$sshUser@localhost`:$RemoteDir/"
-    scp -i "$sshKeyPath" -o StrictHostKeyChecking=no -P 2222 "$LocalCredentialDir\rag_license.txt" "$sshUser@localhost`:$RemoteDir/"
-    scp -i "$sshKeyPath" -o StrictHostKeyChecking=no -P 2222 "$LocalCredentialDir\docker_pat.txt" "$sshUser@localhost`:$RemoteDir/"
+    scp -i "$sshKeyPath" -o StrictHostKeyChecking=accept-new -P 2222 "$LocalCredentialDir\mariadb_token.txt" "$sshUser@localhost`:$RemoteDir/"
+    scp -i "$sshKeyPath" -o StrictHostKeyChecking=accept-new -P 2222 "$LocalCredentialDir\gemini_key.txt" "$sshUser@localhost`:$RemoteDir/"
+    scp -i "$sshKeyPath" -o StrictHostKeyChecking=accept-new -P 2222 "$LocalCredentialDir\rag_license.txt" "$sshUser@localhost`:$RemoteDir/"
+    scp -i "$sshKeyPath" -o StrictHostKeyChecking=accept-new -P 2222 "$LocalCredentialDir\docker_pat.txt" "$sshUser@localhost`:$RemoteDir/"
 }
 finally {
     if (-not $tunnelProcess.HasExited) {

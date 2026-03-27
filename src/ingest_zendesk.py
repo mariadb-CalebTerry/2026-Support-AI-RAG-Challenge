@@ -24,10 +24,12 @@ session.mount('https://', adapter)
 ZENDESK_SUBDOMAIN = os.getenv("ZENDESK_SUBDOMAIN")
 ZENDESK_TOKEN = os.getenv("ZENDESK_OAUTH_TOKEN")
 RAG_API_URL = os.getenv("RAG_API_URL", "http://localhost:8000")
-RAG_API_USER = os.getenv("RAG_API_USER", "admin")
-RAG_API_PASSWORD = os.getenv(
-    "RAG_API_PASSWORD", os.getenv("DB_PASSWORD", "mariadb_rag_password_2024")
-)
+RAG_API_USER = os.getenv("RAG_API_USER")
+RAG_API_PASSWORD = os.getenv("RAG_API_PASSWORD")
+
+if not RAG_API_USER or not RAG_API_PASSWORD:
+    print("Error: RAG_API_USER and RAG_API_PASSWORD must be set in config.env")
+    sys.exit(1)
 
 TEMP_DIR = "/tmp/zendesk_attachments"
 if os.name == "nt":
@@ -182,23 +184,27 @@ def fetch_zendesk_organizations(org_ids):
             "Content-Type": "application/json",
         }
 
-        try:
-            response = session.get(url, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-            organizations.extend(data.get("organizations", []))
-        except requests.exceptions.RequestException as e:
-            if (
-                hasattr(e, "response")
-                and e.response is not None
-                and e.response.status_code == 429
-            ):
-                retry_after = int(e.response.headers.get("Retry-After", 60))
-                print(f"Rate limited. Waiting for {retry_after} seconds...")
-                time.sleep(retry_after)
-                # We would normally retry here, but keeping it simple for now
-            else:
-                print(f"Failed to fetch organization chunk: {e}")
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = session.get(url, headers=headers)
+                response.raise_for_status()
+                data = response.json()
+                organizations.extend(data.get("organizations", []))
+                break
+            except requests.exceptions.RequestException as e:
+                if (
+                    hasattr(e, "response")
+                    and e.response is not None
+                    and e.response.status_code == 429
+                ):
+                    retry_after = int(e.response.headers.get("Retry-After", 60))
+                    print(f"Rate limited. Waiting for {retry_after} seconds (attempt {attempt + 1}/{max_retries})...")
+                    time.sleep(retry_after)
+                    continue
+                else:
+                    print(f"Failed to fetch organization chunk: {e}")
+                    break
 
     return organizations
 
@@ -223,22 +229,27 @@ def fetch_zendesk_users(user_ids):
             "Content-Type": "application/json",
         }
 
-        try:
-            response = session.get(url, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-            users.extend(data.get("users", []))
-        except requests.exceptions.RequestException as e:
-            if (
-                hasattr(e, "response")
-                and e.response is not None
-                and e.response.status_code == 429
-            ):
-                retry_after = int(e.response.headers.get("Retry-After", 60))
-                print(f"Rate limited. Waiting for {retry_after} seconds...")
-                time.sleep(retry_after)
-            else:
-                print(f"Failed to fetch user chunk: {e}")
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = session.get(url, headers=headers)
+                response.raise_for_status()
+                data = response.json()
+                users.extend(data.get("users", []))
+                break
+            except requests.exceptions.RequestException as e:
+                if (
+                    hasattr(e, "response")
+                    and e.response is not None
+                    and e.response.status_code == 429
+                ):
+                    retry_after = int(e.response.headers.get("Retry-After", 60))
+                    print(f"Rate limited. Waiting for {retry_after} seconds (attempt {attempt + 1}/{max_retries})...")
+                    time.sleep(retry_after)
+                    continue
+                else:
+                    print(f"Failed to fetch user chunk: {e}")
+                    break
 
     return users
 
@@ -369,8 +380,12 @@ def ingest_to_rag_api(file_path, metadata):
                     return False
                 headers["Authorization"] = f"Bearer {token}"
 
-                # Need to seek back to start of file for the retry
+                # Seek back and reconstruct the files dict for the retry
                 f.seek(0)
+                files = {
+                    "files": (os.path.basename(file_path), f, "application/octet-stream")
+                }
+                data = {"metadata": json.dumps(metadata)}
                 response = session.post(
                     f"{RAG_API_URL}/documents/ingest",
                     headers=headers,

@@ -44,7 +44,7 @@ $sshKeyPath = "$env:USERPROFILE\.ssh\google_compute_engine"
 
 try {
     # Run the native inline SSH command
-    ssh -i "$sshKeyPath" -o StrictHostKeyChecking=no -p $LocalPort "$sshUser@localhost"
+    ssh -i "$sshKeyPath" -o StrictHostKeyChecking=accept-new -p $LocalPort "$sshUser@localhost"
 }
 finally {
     Write-Host "SSH session ended. Cleaning up IAP tunnel..." -ForegroundColor Cyan

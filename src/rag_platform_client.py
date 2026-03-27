@@ -8,8 +8,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 RAG_API_URL = os.getenv("RAG_API_URL", "http://localhost:8000")
-RAG_API_USER = os.getenv("RAG_API_USER", "admin")
-RAG_API_PASSWORD = os.getenv("RAG_API_PASSWORD", os.getenv("DB_PASSWORD", "mariadb_rag_password_2024"))
+RAG_API_USER = os.getenv("RAG_API_USER")
+RAG_API_PASSWORD = os.getenv("RAG_API_PASSWORD")
+
+if not RAG_API_USER or not RAG_API_PASSWORD:
+    print("Error: RAG_API_USER and RAG_API_PASSWORD must be set in your .env file")
+    sys.exit(1)
 
 class SharedPlatformClient:
     def __init__(self):

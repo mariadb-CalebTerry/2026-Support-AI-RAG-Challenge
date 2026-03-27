@@ -74,8 +74,8 @@ Before configuring MCP, verify that the RAG API is accessible and functioning pr
 
    ```bash
    curl -X POST http://localhost:8000/token \
-     -H "Content-Type: application/json" \
-     -d '{"username": "admin@example.com", "password": "admin123"}'
+     -H "Content-Type: application/x-www-form-urlencoded" \
+     -d "username=YOUR_RAG_API_USER&password=YOUR_RAG_API_PASSWORD"
    ```
 
    Save the returned token for the next step.

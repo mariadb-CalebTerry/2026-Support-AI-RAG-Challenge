@@ -17,9 +17,9 @@ services:
       DB_HOST: ${DB_HOST:-mariadb}
       DB_PORT: ${DB_PORT:-3306}
       DB_USER: ${DB_USER:-raguser}
-      DB_PASSWORD: ${DB_PASSWORD:-ragpass123}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
       DB_NAME: ${DB_NAME:-rag_db}
-      DATABASE_URL: mysql+aiomysql://${DB_USER:-raguser}:${DB_PASSWORD:-ragpass123}@${DB_HOST:-mariadb}:${DB_PORT:-3306}/${DB_NAME:-rag_db}?charset=utf8mb4
+      DATABASE_URL: mysql+aiomysql://${DB_USER:-raguser}:${DB_PASSWORD:?DB_PASSWORD must be set in .env}@${DB_HOST:-mariadb}:${DB_PORT:-3306}/${DB_NAME:-rag_db}?charset=utf8mb4
 
       # SSL Configuration (required for cloud databases like SkySQL)
       DB_SSL_ENABLED: ${DB_SSL_ENABLED:-false}
@@ -27,9 +27,9 @@ services:
       DB_SSL_CA: ${DB_SSL_CA:-}
 
       # Authentication
-      SECRET_KEY: ${SECRET_KEY:-your_secret_key_here_change_in_production}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in .env}
       ADMIN_EMAIL: ${RAG_API_USER:-admin@example.com}
-      ADMIN_PASSWORD: ${RAG_API_PASSWORD:-admin123}
+      ADMIN_PASSWORD: ${RAG_API_PASSWORD:?RAG_API_PASSWORD must be set in .env}
       AUTH_ENABLED: ${AUTH_ENABLED:-true}
 
       # Redis/Celery Configuration (MANDATORY)
@@ -40,7 +40,7 @@ services:
 
       # Embedding Configuration
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-gemini}
-      embedding_model: ${EMBEDDING_MODEL:-gemini-embedding-001}
+      embedding_model: ${EMBEDDING_MODEL:-text-embedding-004}
 
       # API Keys
       OPENAI_API_KEY: ${OPENAI_API_KEY}
@@ -49,8 +49,8 @@ services:
       COHERE_API_KEY: ${COHERE_API_KEY}
 
       # LLM Configuration
-      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
-      LLM_MODEL: ${LLM_MODEL:-gpt-4.1-nano}
+      LLM_PROVIDER: ${LLM_PROVIDER:-gemini}
+      LLM_MODEL: ${LLM_MODEL:-gemini-2.5-flash}
 
       # Table Names
       DOCUMENTS_TABLE: ${DOCUMENTS_TABLE:-documents}
@@ -137,9 +137,9 @@ services:
       DB_HOST: ${DB_HOST:-mariadb}
       DB_PORT: ${DB_PORT:-3306}
       DB_USER: ${DB_USER:-raguser}
-      DB_PASSWORD: ${DB_PASSWORD:-ragpass123}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
       DB_NAME: ${DB_NAME:-rag_db}
-      DATABASE_URL: mysql+aiomysql://${DB_USER:-raguser}:${DB_PASSWORD:-ragpass123}@${DB_HOST:-mariadb}:${DB_PORT:-3306}/${DB_NAME:-rag_db}?charset=utf8mb4
+      DATABASE_URL: mysql+aiomysql://${DB_USER:-raguser}:${DB_PASSWORD:?DB_PASSWORD must be set in .env}@${DB_HOST:-mariadb}:${DB_PORT:-3306}/${DB_NAME:-rag_db}?charset=utf8mb4
 
       # SSL Configuration (required for cloud databases like SkySQL)
       DB_SSL_ENABLED: ${DB_SSL_ENABLED:-false}
@@ -154,7 +154,7 @@ services:
       CELERY_POOL: ${CELERY_POOL:-threads}
 
       # Authentication
-      SECRET_KEY: ${SECRET_KEY:-your_secret_key_here_change_in_production}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in .env}
 
       # App Host/Port for calling back to rag-api (CRITICAL for orchestration)
       APP_HOST: ${APP_HOST:-rag-api}
@@ -162,7 +162,7 @@ services:
 
       # Embedding Configuration
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-gemini}
-      embedding_model: ${EMBEDDING_MODEL:-gemini-embedding-001}
+      embedding_model: ${EMBEDDING_MODEL:-text-embedding-004}
 
       # API Keys
       OPENAI_API_KEY: ${OPENAI_API_KEY}
@@ -171,8 +171,8 @@ services:
       COHERE_API_KEY: ${COHERE_API_KEY}
 
       # LLM Configuration
-      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
-      LLM_MODEL: ${LLM_MODEL:-gpt-4.1-nano}
+      LLM_PROVIDER: ${LLM_PROVIDER:-gemini}
+      LLM_MODEL: ${LLM_MODEL:-gemini-2.5-flash}
 
       # Ollama Configuration (if using Ollama)
       OLLAMA_HOST: ${OLLAMA_HOST:-http://ollama:11434}
@@ -227,11 +227,11 @@ services:
     networks:
       - rag-network
     healthcheck:
-      test: ["CMD", "redis-cli", "-h", "redis", "ping"]
+      test: ["CMD-SHELL", "celery -A app inspect ping --timeout 10 2>/dev/null || redis-cli -h redis ping"]
       interval: 30s
-      timeout: 10s
+      timeout: 15s
       retries: 3
-      start_period: 40s
+      start_period: 60s
     restart: unless-stopped
 
   # MCP Server - Binary based (built from multi-stage Dockerfile.build-binaries)
@@ -253,7 +253,7 @@ services:
       DB_HOST: ${DB_HOST:-mariadb}
       DB_PORT: ${DB_PORT:-3306}
       DB_USER: ${DB_USER:-raguser}
-      DB_PASSWORD: ${DB_PASSWORD:-ragpass123}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
       DB_NAME: ${DB_NAME:-rag_db}
 
       # SSL Configuration (required for cloud databases like SkySQL)
@@ -265,11 +265,11 @@ services:
       REDIS_URL: redis://redis:6379/0
 
       # Authentication
-      SECRET_KEY: ${SECRET_KEY:-your_secret_key_here_change_in_production}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in .env}
 
       # Embedding Configuration
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-gemini}
-      embedding_model: ${EMBEDDING_MODEL:-gemini-embedding-001}
+      embedding_model: ${EMBEDDING_MODEL:-text-embedding-004}
 
       # API Keys
       OPENAI_API_KEY: ${OPENAI_API_KEY}
@@ -278,8 +278,8 @@ services:
       COHERE_API_KEY: ${COHERE_API_KEY}
 
       # LLM Configuration
-      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
-      LLM_MODEL: ${LLM_MODEL:-gpt-4.1-nano}
+      LLM_PROVIDER: ${LLM_PROVIDER:-gemini}
+      LLM_MODEL: ${LLM_MODEL:-gemini-2.5-flash}
 
       # Table Names
       DOCUMENTS_TABLE: ${DOCUMENTS_TABLE:-documents}
@@ -310,6 +310,17 @@ services:
         condition: service_healthy
     networks:
       - rag-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
 
   # MariaDB Database - SEPARATE SERVICE (can run on different host/server)
@@ -319,10 +330,10 @@ services:
     image: mariadb:11.8
     container_name: rag-mariadb
     environment:
-      MARIADB_ROOT_PASSWORD: ${DB_PASSWORD:-ragpass123}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD must be set in .env}
       MARIADB_DATABASE: ${DB_NAME:-rag_db}
       MARIADB_USER: ${DB_USER:-raguser}
-      MARIADB_PASSWORD: ${DB_PASSWORD:-ragpass123}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
       MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: "false"
     ports:
       - "${DB_PORT:-3306}:3306"
@@ -342,7 +353,12 @@ services:
   redis:
     image: redis:7-alpine
     container_name: rag-redis
-    command: redis-server --appendonly yes --appendfsync everysec
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    command: redis-server --appendonly yes --appendfsync everysec --maxmemory 384mb --maxmemory-policy allkeys-lru
     ports:
       - "${REDIS_PORT:-6379}:6379"
     volumes:

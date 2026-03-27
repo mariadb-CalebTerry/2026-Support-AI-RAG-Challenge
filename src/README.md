@@ -4,7 +4,7 @@ This repository contains the infrastructure provisioning and Docker deployment s
 
 ## 1. VM Provisioning (`provision_vm.ps1`)
 
-This script uses the Google Cloud CLI (`gcloud`) to provision the central Virtual Machine (`vm-ai-rag-challenge`) that will host the Docker-based AI RAG stack. It deletes any existing VM and creates a new Debian 12 instance with Docker prerequisites and dedicated data disks.
+This script uses the Google Cloud CLI (`gcloud`) to provision the central Virtual Machine (`vm-ai-rag-challenge`) that will host the Docker-based AI RAG stack. It deletes any existing VM and creates a new Ubuntu 22.04 LTS instance with Docker prerequisites and dedicated data disks.
 
 **Usage:**
 
@@ -85,8 +85,8 @@ This Python script connects to the Zendesk API to fetch tickets and their corres
 ZENDESK_SUBDOMAIN=your_subdomain
 ZENDESK_OAUTH_TOKEN=your_read_only_oauth_token
 RAG_API_URL=http://localhost:8000
-RAG_API_USER=admin
-RAG_API_PASSWORD=mariadb_rag_password_2024
+RAG_API_USER=your_rag_api_user
+RAG_API_PASSWORD=your_rag_api_password
 ```
 
 2. Install dependencies:
@@ -163,7 +163,7 @@ The MariaDB Enterprise MCP Server requires JWT token authentication from the RAG
 ```bash
 # Get JWT token from RAG API
 curl -X POST -H "Content-Type: application/x-www-form-urlencoded" \
-    -d "username=ai.rag@mariadb.com&password=GPxDhwu0p7-z9oP" \
+    -d "username=YOUR_RAG_API_USER&password=YOUR_RAG_API_PASSWORD" \
     http://localhost:8000/token
 
 # Response format

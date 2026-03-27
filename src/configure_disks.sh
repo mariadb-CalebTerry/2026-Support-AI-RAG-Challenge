@@ -42,4 +42,4 @@ echo "Disk configuration complete!"
 echo "Data disk mounted at /data"
 echo "Logs disk mounted at /logs"
 echo "MariaDB directories created and permissions set"
-echo "======================================================
+echo "======================================================"

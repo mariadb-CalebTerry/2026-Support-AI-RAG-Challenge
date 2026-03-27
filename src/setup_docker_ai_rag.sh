@@ -114,8 +114,8 @@ fi
 
 echo "Generating secure keys..."
 SECRET_KEY=$(openssl rand -hex 32)
-JWT_SECRET_KEY=$SECRET_KEY
-MCP_AUTH_SECRET_KEY=$SECRET_KEY
+JWT_SECRET_KEY=$(openssl rand -hex 32)
+MCP_AUTH_SECRET_KEY=$(openssl rand -hex 32)
 
 echo "Creating configuration file with credentials..."
 if [ ! -f "config.env" ]; then
@@ -126,11 +126,13 @@ if [ ! -f "config.env" ]; then
     sudo sed -i "s|GEMINI_API_KEY=.*|GEMINI_API_KEY=$GEMINI_API_KEY|" .env
     sudo sed -i "s|MARIADB_LICENSE_KEY=.*|MARIADB_LICENSE_KEY=$MARIADB_LICENSE_KEY|" .env
     
-    # Generate new secure keys and update them
+    # Generate unique secure keys for each service
     SECRET_KEY=$(openssl rand -hex 32)
+    JWT_SECRET_KEY=$(openssl rand -hex 32)
+    MCP_AUTH_SECRET_KEY=$(openssl rand -hex 32)
     sudo sed -i "s|SECRET_KEY=.*|SECRET_KEY=$SECRET_KEY|" .env
-    sudo sed -i "s|JWT_SECRET_KEY=.*|JWT_SECRET_KEY=$SECRET_KEY|" .env
-    sudo sed -i "s|MCP_AUTH_SECRET_KEY=.*|MCP_AUTH_SECRET_KEY=$SECRET_KEY|" .env
+    sudo sed -i "s|JWT_SECRET_KEY=.*|JWT_SECRET_KEY=$JWT_SECRET_KEY|" .env
+    sudo sed -i "s|MCP_AUTH_SECRET_KEY=.*|MCP_AUTH_SECRET_KEY=$MCP_AUTH_SECRET_KEY|" .env
     
     sudo chown $USER:$USER .env
 else
@@ -143,6 +145,12 @@ sudo chmod 755 /data/uploaded_files /logs/rag
 
 echo "Logging into Docker..."
 sudo docker login -u calebterrymdb --password-stdin < /tmp/ai_rag_challenge_scripts/docker_pat.txt
+
+echo "Cleaning up credential files from /tmp..."
+rm -f /tmp/ai_rag_challenge_scripts/docker_pat.txt
+rm -f /tmp/ai_rag_challenge_scripts/gemini_key.txt
+rm -f /tmp/ai_rag_challenge_scripts/mariadb_token.txt
+rm -f /tmp/ai_rag_challenge_scripts/rag_license.txt
 
 echo "Pulling Docker images..."
 if docker compose -f docker-compose.yml --env-file .env pull; then
@@ -190,11 +198,5 @@ echo "To view logs: docker compose -f docker-compose.yml logs"
 echo "To stop: docker compose -f docker-compose.yml down"
 echo "======================================================"
 
-# Get the external IP for external access
-echo "Getting external IP..."
-EXTERNAL_IP=$(curl -s ifconfig.me)
-if [ -n "$EXTERNAL_IP" ]; then
-    echo "External access will be available at:"
-    echo "- RAG API: http://$EXTERNAL_IP:8000/docs"
-    echo "- MCP Server: http://$EXTERNAL_IP:8002/mcp"
-fi
+echo "NOTE: This VM uses IAP-only access (no public IP)."
+echo "Use start_tunnels.ps1 on your local machine to forward ports via IAP."

@@ -58,7 +58,7 @@ $remoteCommand = @"
 
 try {
     Write-Host "Executing cleanup commands on the VM..." -ForegroundColor Cyan
-    ssh -i "$sshKeyPath" -o StrictHostKeyChecking=no -p 2222 "$sshUser@localhost" $remoteCommand
+    ssh -i "$sshKeyPath" -o StrictHostKeyChecking=accept-new -p 2222 "$sshUser@localhost" $remoteCommand
 }
 finally {
     Write-Host "Closing IAP tunnel..." -ForegroundColor Cyan

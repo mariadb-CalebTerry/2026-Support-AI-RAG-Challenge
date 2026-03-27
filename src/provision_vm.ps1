@@ -49,7 +49,7 @@ if (-not $fwRuleExists) {
     gcloud compute firewall-rules create allow-ssh-from-iap `
         --direction=INGRESS `
         --action=allow `
-        --rules=tcp:22, tcp:8000, tcp:8002 `
+        --rules=tcp:22,tcp:8000,tcp:8002 `
         --source-ranges=35.235.240.0/20 `
         --target-tags="iap"
 }
