@@ -4,6 +4,8 @@ import sys
 import json
 import time
 import sqlite3
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from dotenv import load_dotenv
 from requests_toolbelt import MultipartEncoder
@@ -27,9 +29,13 @@ os.makedirs(TEMP_DIR, exist_ok=True)
 
 DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ingestion_state.db")
 
+_token_cache = None
+_token_lock = threading.Lock()
+_db_lock = threading.Lock()
+
 
 def setup_sqlite_db():
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect(DB_FILE, check_same_thread=False)
     c = conn.cursor()
     c.execute(
         "CREATE TABLE IF NOT EXISTS processed_items (item_id TEXT PRIMARY KEY, processed_at TIMESTAMP)"
@@ -39,33 +45,43 @@ def setup_sqlite_db():
 
 
 def is_processed(conn, item_id):
-    c = conn.cursor()
-    c.execute("SELECT 1 FROM processed_items WHERE item_id = ?", (item_id,))
-    return c.fetchone() is not None
+    with _db_lock:
+        c = conn.cursor()
+        c.execute("SELECT 1 FROM processed_items WHERE item_id = ?", (item_id,))
+        return c.fetchone() is not None
 
 
 def mark_processed(conn, item_id):
-    c = conn.cursor()
-    c.execute(
-        "INSERT INTO processed_items (item_id, processed_at) VALUES (?, ?)",
-        (item_id, datetime.now()),
-    )
-    conn.commit()
-
-
-def get_rag_api_token():
-    print(f"Authenticating with RAG API at {RAG_API_URL}...")
-    try:
-        response = requests.post(
-            f"{RAG_API_URL}/token",
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-            data={"username": RAG_API_USER, "password": RAG_API_PASSWORD},
+    with _db_lock:
+        c = conn.cursor()
+        c.execute(
+            "INSERT INTO processed_items (item_id, processed_at) VALUES (?, ?)",
+            (item_id, datetime.now()),
         )
-        response.raise_for_status()
-        return response.json().get("access_token")
-    except requests.exceptions.RequestException as e:
-        print(f"Error authenticating with RAG API: {e}")
-        sys.exit(1)
+        conn.commit()
+
+
+def get_rag_api_token(force_refresh=False):
+    global _token_cache
+    with _token_lock:
+        if _token_cache and not force_refresh:
+            return _token_cache
+
+        print(f"Authenticating with RAG API at {RAG_API_URL}...")
+        try:
+            response = requests.post(
+                f"{RAG_API_URL}/token",
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                data={"username": RAG_API_USER, "password": RAG_API_PASSWORD},
+            )
+            response.raise_for_status()
+            _token_cache = response.json().get("access_token")
+            return _token_cache
+        except requests.exceptions.RequestException as e:
+            print(f"Error authenticating with RAG API: {e}")
+            if force_refresh:
+                return None
+            sys.exit(1)
 
 
 def generate_org_metadata(org):
@@ -306,8 +322,8 @@ def download_attachment(url, filename):
         return None
 
 
-def ingest_to_rag_api(file_path, metadata, get_token_func):
-    token = get_token_func()
+def ingest_to_rag_api(file_path, metadata):
+    token = get_rag_api_token()
     try:
         with open(file_path, "rb") as f:
             headers = {
@@ -330,8 +346,9 @@ def ingest_to_rag_api(file_path, metadata, get_token_func):
                 print(
                     "Token expired or invalid. Attempting to refresh token and retry..."
                 )
-                # Clear cached token if you had one, or let the function grab a new one
-                token = get_rag_api_token()
+                token = get_rag_api_token(force_refresh=True)
+                if not token:
+                    return False
                 headers["Authorization"] = f"Bearer {token}"
 
                 # Need to seek back to start of file for the retry
@@ -359,9 +376,9 @@ def ingest_data(organizations, users, tickets):
     )
     conn = setup_sqlite_db()
 
-    # 1. Process Organizations
-    print("Processing Organizations...")
-    for org in organizations:
+    max_workers = 10  # Process up to 10 items concurrently
+
+    def process_org(org):
         org_id = org["id"]
         org_item_id = f"org_{org_id}"
 
@@ -380,15 +397,13 @@ def ingest_data(organizations, users, tickets):
                 f.write(summary_md)
 
             metadata = generate_org_metadata(org)
-            if ingest_to_rag_api(summary_path, metadata, get_rag_api_token):
+            if ingest_to_rag_api(summary_path, metadata):
                 mark_processed(conn, org_item_id)
                 os.remove(summary_path)
         else:
             print(f"  Organization {org_id} already processed. Skipping.")
 
-    # 2. Process Users (Requesters)
-    print("Processing Users...")
-    for user in users:
+    def process_user(user):
         user_id = user["id"]
         user_item_id = f"user_{user_id}"
 
@@ -411,15 +426,13 @@ def ingest_data(organizations, users, tickets):
                 f.write(summary_md)
 
             metadata = generate_user_metadata(user)
-            if ingest_to_rag_api(summary_path, metadata, get_rag_api_token):
+            if ingest_to_rag_api(summary_path, metadata):
                 mark_processed(conn, user_item_id)
                 os.remove(summary_path)
         else:
             print(f"  User {user_id} already processed. Skipping.")
 
-    # 3. Process Tickets and Attachments
-    print("Processing Tickets...")
-    for ticket in tickets:
+    def process_ticket(ticket):
         ticket_id = ticket["id"]
         ticket_item_id = f"ticket_{ticket_id}"
 
@@ -454,7 +467,7 @@ def ingest_data(organizations, users, tickets):
 
             # Generate metadata and ingest summary
             metadata = generate_metadata(ticket, is_attachment=False)
-            if ingest_to_rag_api(summary_path, metadata, get_rag_api_token):
+            if ingest_to_rag_api(summary_path, metadata):
                 mark_processed(conn, ticket_item_id)
                 os.remove(summary_path)
         else:
@@ -476,15 +489,38 @@ def ingest_data(organizations, users, tickets):
                     att_metadata = generate_metadata(
                         ticket, is_attachment=True, attachment_name=att["file_name"]
                     )
-                    if ingest_to_rag_api(
-                        local_att_path, att_metadata, get_rag_api_token
-                    ):
+                    if ingest_to_rag_api(local_att_path, att_metadata):
                         mark_processed(conn, att_item_id)
                         os.remove(local_att_path)
             else:
                 print(
                     f"  Attachment {att['file_name']} (ID: {att_id}) already processed. Skipping."
                 )
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        print("Processing Organizations...")
+        org_futures = [executor.submit(process_org, org) for org in organizations]
+        for future in as_completed(org_futures):
+            try:
+                future.result()
+            except Exception as e:
+                print(f"Error processing organization: {e}")
+
+        print("Processing Users...")
+        user_futures = [executor.submit(process_user, user) for user in users]
+        for future in as_completed(user_futures):
+            try:
+                future.result()
+            except Exception as e:
+                print(f"Error processing user: {e}")
+
+        print("Processing Tickets...")
+        ticket_futures = [executor.submit(process_ticket, ticket) for ticket in tickets]
+        for future in as_completed(ticket_futures):
+            try:
+                future.result()
+            except Exception as e:
+                print(f"Error processing ticket: {e}")
 
     conn.close()
 

@@ -63,7 +63,13 @@ try {
         # Check if any tunnel process has exited
         foreach ($tunnel in $tunnels) {
             if ($tunnel.Process.HasExited) {
-                Write-Host "Warning: Tunnel process for $($tunnel.PortInfo.Service) (port $($tunnel.PortInfo.RemotePort)) exited unexpectedly. Restarting..." -ForegroundColor Yellow
+                Write-Host "Warning: Tunnel process for $($tunnel.PortInfo.Service) (port $($tunnel.PortInfo.RemotePort)) exited unexpectedly. Restarting in 3 seconds..." -ForegroundColor Yellow
+                
+                # Cleanup any stuck processes holding this port
+                Get-Process -Name "python" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -match "start-iap-tunnel.*$VmName.*$($tunnel.PortInfo.RemotePort)" } | Stop-Process -Force -ErrorAction SilentlyContinue
+                
+                Start-Sleep -Seconds 3
+                
                 $newProcess = Start-Process -FilePath "cmd.exe" -ArgumentList "/c gcloud compute start-iap-tunnel $VmName $($tunnel.PortInfo.RemotePort) --zone=$Zone --local-host-port=localhost:$($tunnel.PortInfo.LocalPort)" -WindowStyle Hidden -PassThru
                 $tunnel.Process = $newProcess
             }

@@ -28,8 +28,8 @@ services:
 
       # Authentication
       SECRET_KEY: ${SECRET_KEY:-your_secret_key_here_change_in_production}
-      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
+      ADMIN_EMAIL: ${RAG_API_USER:-admin@example.com}
+      ADMIN_PASSWORD: ${RAG_API_PASSWORD:-admin123}
       AUTH_ENABLED: ${AUTH_ENABLED:-true}
 
       # Redis/Celery Configuration (MANDATORY)
