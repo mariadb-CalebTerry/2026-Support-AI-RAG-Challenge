@@ -123,14 +123,14 @@ if [ ! -f "config.env" ]; then
     sudo cp /tmp/ai_rag_challenge_scripts/src/config.env .env
     
     # Update with the actual credentials read earlier
-    sudo sed -i "s/GEMINI_API_KEY=.*/GEMINI_API_KEY=$GEMINI_API_KEY/" .env
-    sudo sed -i "s/MARIADB_LICENSE_KEY=.*/MARIADB_LICENSE_KEY=$MARIADB_LICENSE_KEY/" .env
+    sudo sed -i "s|GEMINI_API_KEY=.*|GEMINI_API_KEY=$GEMINI_API_KEY|" .env
+    sudo sed -i "s|MARIADB_LICENSE_KEY=.*|MARIADB_LICENSE_KEY=$MARIADB_LICENSE_KEY|" .env
     
     # Generate new secure keys and update them
     SECRET_KEY=$(openssl rand -hex 32)
-    sudo sed -i "s/SECRET_KEY=.*/SECRET_KEY=$SECRET_KEY/" .env
-    sudo sed -i "s/JWT_SECRET_KEY=.*/JWT_SECRET_KEY=$SECRET_KEY/" .env
-    sudo sed -i "s/MCP_AUTH_SECRET_KEY=.*/MCP_AUTH_SECRET_KEY=$SECRET_KEY/" .env
+    sudo sed -i "s|SECRET_KEY=.*|SECRET_KEY=$SECRET_KEY|" .env
+    sudo sed -i "s|JWT_SECRET_KEY=.*|JWT_SECRET_KEY=$SECRET_KEY|" .env
+    sudo sed -i "s|MCP_AUTH_SECRET_KEY=.*|MCP_AUTH_SECRET_KEY=$SECRET_KEY|" .env
     
     sudo chown $USER:$USER .env
 else
@@ -142,7 +142,7 @@ chmod 600 .env
 sudo chmod 755 /data/uploaded_files /logs/rag
 
 echo "Logging into Docker..."
-echo "$DOCKER_PAT" | sudo docker login -u calebterrymdb --password-stdin
+sudo docker login -u calebterrymdb --password-stdin < /tmp/ai_rag_challenge_scripts/docker_pat.txt
 
 echo "Pulling Docker images..."
 if docker compose -f docker-compose.yml --env-file .env pull; then

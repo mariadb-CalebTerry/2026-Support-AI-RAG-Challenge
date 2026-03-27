@@ -124,6 +124,11 @@ services:
   celery-worker:
     image: mariadb/mariadb-ai-dev:celery-worker-runtime
     container_name: rag-celery-worker
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 2G
     environment:
       # License Key (REQUIRED - obtain from MariaDB)
       MARIADB_LICENSE_KEY: ${MARIADB_LICENSE_KEY}
@@ -356,6 +361,11 @@ services:
   docling-ray:
     image: mariadb/mariadb-ai-dev:docling-ray
     container_name: rag-docling-ray
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
     environment:
       RAY_NUM_CPUS: ${RAY_NUM_CPUS:-4}
       RAY_OBJECT_STORE_MEMORY: ${RAY_OBJECT_STORE_MEMORY:-2000000000}

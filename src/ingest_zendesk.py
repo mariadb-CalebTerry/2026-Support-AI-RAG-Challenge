@@ -8,10 +8,18 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from dotenv import load_dotenv
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from requests_toolbelt import MultipartEncoder
 
 # Load environment variables
 load_dotenv("config.env")
+
+# Configure global session with connection pooling
+session = requests.Session()
+adapter = HTTPAdapter(pool_connections=20, pool_maxsize=20)
+session.mount('http://', adapter)
+session.mount('https://', adapter)
 
 ZENDESK_SUBDOMAIN = os.getenv("ZENDESK_SUBDOMAIN")
 ZENDESK_TOKEN = os.getenv("ZENDESK_OAUTH_TOKEN")
@@ -61,15 +69,19 @@ def mark_processed(conn, item_id):
         conn.commit()
 
 
-def get_rag_api_token(force_refresh=False):
+def get_rag_api_token(force_refresh=False, current_token=None):
     global _token_cache
     with _token_lock:
         if _token_cache and not force_refresh:
             return _token_cache
 
+        # Race condition protection: If another thread refreshed while we waited for lock
+        if force_refresh and current_token and _token_cache and _token_cache != current_token:
+            return _token_cache
+
         print(f"Authenticating with RAG API at {RAG_API_URL}...")
         try:
-            response = requests.post(
+            response = session.post(
                 f"{RAG_API_URL}/token",
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
                 data={"username": RAG_API_USER, "password": RAG_API_PASSWORD},
@@ -171,7 +183,7 @@ def fetch_zendesk_organizations(org_ids):
         }
 
         try:
-            response = requests.get(url, headers=headers)
+            response = session.get(url, headers=headers)
             response.raise_for_status()
             data = response.json()
             organizations.extend(data.get("organizations", []))
@@ -212,7 +224,7 @@ def fetch_zendesk_users(user_ids):
         }
 
         try:
-            response = requests.get(url, headers=headers)
+            response = session.get(url, headers=headers)
             response.raise_for_status()
             data = response.json()
             users.extend(data.get("users", []))
@@ -243,7 +255,7 @@ def fetch_zendesk_tickets(limit=1000):
     tickets = []
     while url:
         try:
-            response = requests.get(url, headers=headers)
+            response = session.get(url, headers=headers)
             response.raise_for_status()
         except requests.exceptions.RequestException as e:
             if (
@@ -279,21 +291,27 @@ def fetch_ticket_comments(ticket_id):
         "Content-Type": "application/json",
     }
 
-    try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        return response.json().get("comments", [])
-    except requests.exceptions.RequestException as e:
-        if (
-            hasattr(e, "response")
-            and e.response is not None
-            and e.response.status_code == 429
-        ):
-            retry_after = int(e.response.headers.get("Retry-After", 60))
-            time.sleep(retry_after)
-            return fetch_ticket_comments(ticket_id)
-        print(f"Failed to fetch comments for ticket {ticket_id}: {e}")
-        return []
+    max_retries = 5
+    for attempt in range(max_retries):
+        try:
+            response = session.get(url, headers=headers)
+            response.raise_for_status()
+            return response.json().get("comments", [])
+        except requests.exceptions.RequestException as e:
+            if (
+                hasattr(e, "response")
+                and e.response is not None
+                and e.response.status_code == 429
+            ):
+                retry_after = int(e.response.headers.get("Retry-After", 60))
+                print(f"Rate limited getting comments for {ticket_id}. Waiting for {retry_after} seconds...")
+                time.sleep(retry_after)
+                continue
+            print(f"Failed to fetch comments for ticket {ticket_id}: {e}")
+            return []
+            
+    print(f"Max retries reached fetching comments for ticket {ticket_id}")
+    return []
 
 
 import re
@@ -310,7 +328,7 @@ def download_attachment(url, filename):
     safe_filename = sanitize_filename(filename)
     local_path = os.path.join(TEMP_DIR, safe_filename)
     try:
-        response = requests.get(url, stream=True)
+        response = session.get(url, stream=True)
         response.raise_for_status()
         with open(local_path, "wb") as f:
             for chunk in response.iter_content(chunk_size=8192):
@@ -334,7 +352,7 @@ def ingest_to_rag_api(file_path, metadata):
             }
             data = {"metadata": json.dumps(metadata)}
 
-            response = requests.post(
+            response = session.post(
                 f"{RAG_API_URL}/documents/ingest",
                 headers=headers,
                 files=files,
@@ -346,14 +364,14 @@ def ingest_to_rag_api(file_path, metadata):
                 print(
                     "Token expired or invalid. Attempting to refresh token and retry..."
                 )
-                token = get_rag_api_token(force_refresh=True)
+                token = get_rag_api_token(force_refresh=True, current_token=token)
                 if not token:
                     return False
                 headers["Authorization"] = f"Bearer {token}"
 
                 # Need to seek back to start of file for the retry
                 f.seek(0)
-                response = requests.post(
+                response = session.post(
                     f"{RAG_API_URL}/documents/ingest",
                     headers=headers,
                     files=files,
