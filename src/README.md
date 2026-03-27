@@ -148,6 +148,41 @@ After successful deployment:
 - **MCP Server**: http://\<vm-ip>:8002/mcp
 - **MCP Health**: http://\<vm-ip>:8002/health
 
+## 7. MCP Server Authentication
+
+The MariaDB Enterprise MCP Server requires JWT token authentication from the RAG API. The setup script automatically handles this process:
+
+**Authentication Flow:**
+
+1. **RAG API Authentication**: The setup script calls the RAG API `/token` endpoint using `RAG_API_USER` and `RAG_API_PASSWORD` to obtain a JWT token
+2. **MCP Server Configuration**: The JWT token is stored in the environment and used for MCP server authentication
+3. **Automatic Token Management**: The setup script waits for the RAG API to be ready before attempting to obtain the token
+
+**Manual Token Retrieval (if needed):**
+
+```bash
+# Get JWT token from RAG API
+curl -X POST -H "Content-Type: application/x-www-form-urlencoded" \
+    -d "username=ai.rag@mariadb.com&password=GPxDhwu0p7-z9oP" \
+    http://localhost:8000/token
+
+# Response format
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "bearer"
+}
+```
+
+**MCP Server Usage:**
+
+Once authenticated, the MCP server provides these capabilities:
+
+- Database operations (list tables, execute queries)
+- Vector store management (create, search, delete)
+- RAG operations (ingestion, retrieval, generation)
+
+The MCP server runs on port 8002 and requires the JWT token for all operations.
+
 ## Service Management
 
 ```bash
