@@ -26,13 +26,13 @@ This script formats and mounts the dedicated disks that were attached during VM 
 **Usage:**
 
 ```bash
-cd /tmp/ai_rag_challenge_scripts/pipeline
+cd /tmp/ai_rag_challenge_scripts/src
 bash configure_disks.sh
 ```
 
 ## 3. Upload Files to VM (`upload_to_vm.ps1`)
 
-This script securely uploads the pipeline scripts and credential files to the newly provisioned VM using an IAP tunnel.
+This script securely uploads the src directory and credential files to the newly provisioned VM using an IAP tunnel.
 
 **Usage:**
 
@@ -59,7 +59,7 @@ This script automates the complete Docker deployment of MariaDB AI RAG 1.1 (Beta
    ```powershell
    .\connect_vm.ps1
    ```
-2. Navigate to the uploaded directory: `cd /tmp/ai_rag_challenge_scripts/pipeline`
+2. Navigate to the uploaded directory: `cd /tmp/ai_rag_challenge_scripts/src`
 3. Run the Docker setup script:
 
 ```bash

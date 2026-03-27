@@ -3,7 +3,7 @@
     Uploads the installation and ingestion scripts to the provisioned GCP VM.
 
 .DESCRIPTION
-    This script uses gcloud compute scp to securely transfer the pipeline 
+    This script uses gcloud compute scp to securely transfer the src 
     directory over an Identity-Aware Proxy (IAP) tunnel to the target VM 
     into the /tmp/ai_rag_challenge_scripts directory.
 #>
@@ -15,7 +15,7 @@ $ProjectId = "mariadb-rag-ai-challenge"
 $VmName = "vm-ai-rag-challenge"
 $Zone = "us-east1-b"
 $RemoteDir = "/tmp/ai_rag_challenge_scripts"
-$LocalPipelineDir = "C:\Projects\MariaDB\2026 Support AI RAG Challenge\src"
+$LocalSrcDir = "C:\Projects\MariaDB\2026 Support AI RAG Challenge\src"
 $LocalCredentialDir = "C:\Projects\MariaDB\2026 Support AI RAG Challenge"
 
 Write-Host "Setting Google Cloud project to $ProjectId..." -ForegroundColor Cyan
@@ -34,17 +34,17 @@ $sshKeyPath = "$env:USERPROFILE\.ssh\google_compute_engine"
 
 try {
     Write-Host "Creating remote directory..." -ForegroundColor Cyan
-    ssh -i "$sshKeyPath" -o StrictHostKeyChecking=no -p 2222 "$sshUser@localhost" "mkdir -p $RemoteDir/pipeline"
+    ssh -i "$sshKeyPath" -o StrictHostKeyChecking=no -p 2222 "$sshUser@localhost" "mkdir -p $RemoteDir/src"
 
-    Write-Host "Uploading pipeline files to the VM..." -ForegroundColor Cyan
+    Write-Host "Uploading src files to the VM..." -ForegroundColor Cyan
     # Create a temporary directory excluding unwanted folders
     $tempDir = "$env:TEMP\ai_rag_upload_$(Get-Random)"
     New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
     
     try {
-        # Copy pipeline files excluding unwanted directories
+        # Copy src files excluding unwanted directories
         Write-Host "Preparing files for upload (excluding __pycache__, logs, uploaded_files)..." -ForegroundColor Cyan
-        Get-ChildItem -Path $LocalPipelineDir | Where-Object { 
+        Get-ChildItem -Path $LocalSrcDir | Where-Object { 
             $_.Name -notin @("__pycache__", "logs", "uploaded_files") -and 
             !$_.Name.StartsWith("__pycache__") 
         } | ForEach-Object {
@@ -59,7 +59,7 @@ try {
         }
         
         # Upload the cleaned directory
-        scp -i "$sshKeyPath" -o StrictHostKeyChecking=no -P 2222 -r "$tempDir\*" "$sshUser@localhost`:$RemoteDir/pipeline"
+        scp -i "$sshKeyPath" -o StrictHostKeyChecking=no -P 2222 -r "$tempDir\*" "$sshUser@localhost`:$RemoteDir/src"
     }
     finally {
         # Clean up temporary directory
@@ -84,14 +84,14 @@ finally {
 Write-Host ""
 Write-Host "======================================================" -ForegroundColor Green
 Write-Host "Upload Complete!" -ForegroundColor Green
-Write-Host "Your files are located on the VM at: $RemoteDir/pipeline" -ForegroundColor White
+Write-Host "Your files are located on the VM at: $RemoteDir/src" -ForegroundColor White
 Write-Host "Credentials are located on the VM at: $RemoteDir/" -ForegroundColor White
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Yellow
 Write-Host "1. Connect to the VM:" -ForegroundColor White
 Write-Host "   .\connect_vm.ps1" -ForegroundColor Cyan
 Write-Host "2. Navigate to the uploaded directory:" -ForegroundColor White
-Write-Host "   cd $RemoteDir/pipeline" -ForegroundColor Cyan
+Write-Host "   cd $RemoteDir/src" -ForegroundColor Cyan
 Write-Host "3. Run the Docker setup script:" -ForegroundColor White
 Write-Host "   bash setup_docker_ai_rag.sh" -ForegroundColor Cyan
 Write-Host "======================================================" -ForegroundColor Green
