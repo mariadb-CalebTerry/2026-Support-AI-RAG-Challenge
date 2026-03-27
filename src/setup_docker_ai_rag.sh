@@ -113,9 +113,11 @@ else
 fi
 
 echo "Generating secure keys..."
+# NOTE: MariaDB AI RAG requires SECRET_KEY, JWT_SECRET_KEY, and MCP_AUTH_SECRET_KEY
+# to use the SAME value across all services for JWT validation to work correctly.
 SECRET_KEY=$(openssl rand -hex 32)
-JWT_SECRET_KEY=$(openssl rand -hex 32)
-MCP_AUTH_SECRET_KEY=$(openssl rand -hex 32)
+JWT_SECRET_KEY=$SECRET_KEY
+MCP_AUTH_SECRET_KEY=$SECRET_KEY
 
 echo "Creating configuration file with credentials..."
 if [ ! -f "config.env" ]; then
@@ -126,13 +128,12 @@ if [ ! -f "config.env" ]; then
     sudo sed -i "s|GEMINI_API_KEY=.*|GEMINI_API_KEY=$GEMINI_API_KEY|" .env
     sudo sed -i "s|MARIADB_LICENSE_KEY=.*|MARIADB_LICENSE_KEY=$MARIADB_LICENSE_KEY|" .env
     
-    # Generate unique secure keys for each service
+    # Generate a single secure key shared across all services
+    # (MariaDB AI RAG requires these three keys to match for JWT validation)
     SECRET_KEY=$(openssl rand -hex 32)
-    JWT_SECRET_KEY=$(openssl rand -hex 32)
-    MCP_AUTH_SECRET_KEY=$(openssl rand -hex 32)
     sudo sed -i "s|SECRET_KEY=.*|SECRET_KEY=$SECRET_KEY|" .env
-    sudo sed -i "s|JWT_SECRET_KEY=.*|JWT_SECRET_KEY=$JWT_SECRET_KEY|" .env
-    sudo sed -i "s|MCP_AUTH_SECRET_KEY=.*|MCP_AUTH_SECRET_KEY=$MCP_AUTH_SECRET_KEY|" .env
+    sudo sed -i "s|JWT_SECRET_KEY=.*|JWT_SECRET_KEY=$SECRET_KEY|" .env
+    sudo sed -i "s|MCP_AUTH_SECRET_KEY=.*|MCP_AUTH_SECRET_KEY=$SECRET_KEY|" .env
     
     sudo chown $USER:$USER .env
 else
